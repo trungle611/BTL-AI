@@ -1,6 +1,6 @@
 # HBTNFIT Track 1
 
-Bản demo đầu tiên tập trung vào **Ăn uống** và **Tập luyện**. Gemini gợi ý tối đa 5 món trong một ảnh; người dùng chỉnh khẩu phần, xác nhận rồi mới thêm vào thực đơn hôm nay. Món ngoài danh mục cũng có thể tự nhập và xác nhận. Trang tập luyện riêng có giáo án PPL và Upper/Lower theo mục tiêu tăng cơ hoặc giảm cân. Buổi tập chạy theo tiến độ hoàn thành, không gắn vào thứ cố định; người dùng ghi nhận có đi tập hoặc bỏ lỡ từng ngày. API lập thực đơn 7 ngày từ đề xuất trước vẫn còn trong backend, nhưng chưa nằm trong giao diện phiên bản này. Xem [đặc tả UI phiên bản đầu](docs/UI_V1.md).
+Bản demo đầu tiên tập trung vào **Ăn uống** và **Tập luyện**. Gemini gợi ý tối đa 5 món trong một ảnh; người dùng chỉnh khẩu phần, xác nhận rồi mới thêm vào thực đơn hôm nay. Món ngoài danh mục cũng có thể tự nhập và xác nhận. Trang tập luyện riêng có giáo án PPL và Upper/Lower theo mục tiêu tăng cơ hoặc giảm cân. Buổi tập chạy theo tiến độ hoàn thành, không gắn vào thứ cố định; người dùng ghi nhận có đi tập hoặc bỏ lỡ từng ngày. Mục Cá nhân cho phép chọn ngày muốn đạt cân nặng mục tiêu; kcal và protein ước tính mỗi ngày được nối với thực đơn hôm nay. Xem [cách tính và giới hạn](docs/GOAL_TARGETS.md). API lập thực đơn 7 ngày từ đề xuất trước vẫn còn trong backend, nhưng chưa nằm trong giao diện phiên bản này. Xem [đặc tả UI phiên bản đầu](docs/UI_V1.md).
 
 Đây là mã nguồn chạy thử, chưa có bộ dữ liệu dinh dưỡng đã kiểm chứng, bộ ảnh đánh giá hay kết quả thực nghiệm thật.
 

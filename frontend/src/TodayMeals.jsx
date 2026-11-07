@@ -5,13 +5,16 @@ const labels = {breakfast:'Bữa sáng',lunch:'Bữa trưa',dinner:'Bữa tối'
 const slots = ['breakfast','lunch','dinner','snack'];
 const fmt = value => Number(value || 0).toLocaleString('vi-VN',{maximumFractionDigits:1});
 
-export default function TodayMeals({dashboard, call, refresh, onError, compact = false}) {
+export default function TodayMeals({dashboard, profile, onOpenProfile, call, refresh, onError, compact = false}) {
   const [editing, setEditing] = useState(null);
   const [grams, setGrams] = useState('');
   const [mealType, setMealType] = useState('lunch');
   const [busy, setBusy] = useState(false);
   const entries = dashboard?.entries || [];
   const totals = dashboard?.totals || {};
+  const target = profile?.daily_targets;
+  const kcalProgress = target ? Math.min(100, Math.round((totals.kcal || 0) / target.kcal * 100)) : 0;
+  const proteinProgress = target ? Math.min(100, Math.round((totals.protein || 0) / target.protein_g * 100)) : 0;
 
   function beginEdit(entry) {setEditing(entry.id);setGrams(String(entry.grams));setMealType(entry.meal_type);}
   async function saveEdit(id) {
@@ -31,6 +34,7 @@ export default function TodayMeals({dashboard, call, refresh, onError, compact =
 
   return <section className="panel today-panel" aria-labelledby="today-meals-title">
     <div className="panel-heading"><div><div className="section-kicker"><CalendarDays size={15}/> DINH DƯỠNG HÔM NAY</div><h2 id="today-meals-title">Thực đơn hôm nay</h2></div><span className="count-pill">{entries.length} món</span></div>
+    {target ? <div className="daily-goal"><div className="daily-goal-top"><strong>Mục tiêu theo cân nặng của bạn</strong><button className="link-button" onClick={onOpenProfile}>Sửa mục tiêu</button></div><div className="goal-progress"><div><span>Kcal</span><b>{fmt(totals.kcal)} / {fmt(target.kcal)}</b></div><progress value={kcalProgress} max="100" aria-label="Tiến độ kcal hôm nay"/></div><div className="goal-progress"><div><span>Protein</span><b>{fmt(totals.protein)} / {fmt(target.protein_g)} g</b></div><progress value={proteinProgress} max="100" aria-label="Tiến độ protein hôm nay"/></div><small>{profile.target_date && `Thời hạn mong muốn: ${new Date(`${profile.target_date}T12:00:00`).toLocaleDateString('vi-VN')}. `}Số liệu món chỉ được cộng sau khi xác nhận.</small></div> : <div className="daily-goal daily-goal-empty"><span>Chưa có mục tiêu kcal và protein mỗi ngày.</span><button className="link-button" onClick={onOpenProfile}>Thiết lập trong Cá nhân →</button></div>}
     <div className="nutrition-summary">
       <div className="calorie-total"><strong>{fmt(totals.kcal)}</strong><span>kcal đã thêm</span></div>
       <div className="macro-grid"><div><b>{fmt(totals.protein)}g</b><span>Protein</span></div><div><b>{fmt(totals.carb)}g</b><span>Carb</span></div><div><b>{fmt(totals.fat)}g</b><span>Chất béo</span></div></div>

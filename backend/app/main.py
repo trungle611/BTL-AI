@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, selectinload
 from . import ai
 from .core import fallback_plan, match_foods, normalize, nutrition, validate_plan
 from .db import Base, engine, get_db, migrate_demo_columns
+from .goals import daily_targets
 from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile, ProfileGuidance, WorkoutProgress, WorkoutSelection, WorkoutVisit
 from .workout_plans import PLANS, public_plan, session_items
 
@@ -92,6 +93,9 @@ class ProfileIn(BaseModel):
     height_cm: float | None = Field(default=None, ge=100, le=250)
     weight_kg: float | None = Field(default=None, ge=25, le=400)
     target_weight_kg: float | None = Field(default=None, ge=25, le=400)
+    target_date: date | None = None
+    sex: str | None = Field(default=None, pattern="^(female|male)$")
+    activity_level: str | None = Field(default=None, pattern="^(sedentary|light|moderate|high)$")
     goal: str = Field(default="maintain", pattern="^(maintain|gain|lose)$")
     avoid_tags: list[str] = []
     target_kcal: float = Field(default=1800, ge=900, le=5000)
@@ -99,9 +103,12 @@ class ProfileIn(BaseModel):
 
 def profile_data(profile, guidance=None):
     return {"age": profile.age, "height_cm": profile.height_cm,
-            "weight_kg": profile.weight_kg, "goal": profile.goal,
+            "weight_kg": profile.weight_kg, "sex": profile.sex,
+            "activity_level": profile.activity_level, "goal": profile.goal,
             "avoid_tags": profile.avoid_tags or [], "target_kcal": profile.target_kcal,
             "target_weight_kg": guidance.target_weight_kg if guidance else None,
+            "target_date": guidance.target_date if guidance else None,
+            "daily_targets": daily_targets(profile, guidance, local_today()),
             "analysis": guidance.analysis if guidance else None,
             "food_choice": guidance.food_choice if guidance else None,
             "workout_choice": guidance.workout_choice if guidance else None}
@@ -110,21 +117,26 @@ def profile_data(profile, guidance=None):
 @app.get("/api/profile")
 def get_profile(db: Session = Depends(get_db)):
     profile = profile_record(db)
-    return profile_data(profile, guidance_record(db)) if profile else ProfileIn().model_dump() | {"analysis":None,"food_choice":None,"workout_choice":None}
+    return profile_data(profile, guidance_record(db)) if profile else ProfileIn().model_dump(mode="json") | {"daily_targets":None,"analysis":None,"food_choice":None,"workout_choice":None}
 
 
 @app.put("/api/profile")
 def save_profile(payload: ProfileIn, db: Session = Depends(get_db)):
+    if payload.target_date and payload.target_date <= local_today():
+        raise HTTPException(422, "Ngày hoàn thành mục tiêu phải sau hôm nay")
     profile = profile_record(db) or Profile(visitor_id=visitor(db))
     guidance = guidance_record(db) or ProfileGuidance(visitor_id=visitor(db))
     if (profile.weight_kg != payload.weight_kg or guidance.target_weight_kg != payload.target_weight_kg
+            or guidance.target_date != (payload.target_date.isoformat() if payload.target_date else None)
             or profile.avoid_tags != payload.avoid_tags or profile.age != payload.age
-            or profile.height_cm != payload.height_cm or profile.goal != payload.goal):
+            or profile.height_cm != payload.height_cm or profile.goal != payload.goal
+            or profile.sex != payload.sex or profile.activity_level != payload.activity_level):
         guidance.analysis = None
         guidance.food_choice = None
         guidance.workout_choice = None
     guidance.target_weight_kg = payload.target_weight_kg
-    for key, value in payload.model_dump(exclude={"target_weight_kg"}).items():
+    guidance.target_date = payload.target_date.isoformat() if payload.target_date else None
+    for key, value in payload.model_dump(exclude={"target_weight_kg", "target_date"}).items():
         setattr(profile, key, value)
     db.add(profile)
     db.add(guidance)
@@ -142,7 +154,8 @@ def analyze_profile(db: Session = Depends(get_db)):
     options = [plan for plan in PLANS if plan["goal"] == goal]
     started = perf_counter()
     try:
-        generated = ai.generate_profile_guidance(profile, guidance.target_weight_kg, [plan["name"] for plan in options])
+        generated = ai.generate_profile_guidance(profile, guidance.target_weight_kg, [plan["name"] for plan in options],
+                                                 daily_targets(profile, guidance, local_today()))
         food_options = generated.get("food_options", [])[:2]
         if len(food_options) != 2 or any(not item.get("title") or not item.get("detail") for item in food_options):
             raise ValueError("AI chưa trả đủ phương án")

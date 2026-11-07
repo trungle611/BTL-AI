@@ -1,5 +1,6 @@
 import os
 import tempfile
+from datetime import timedelta
 from io import BytesIO
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -9,6 +10,7 @@ dbfile.close()
 os.environ['DATABASE_URL'] = f"sqlite:///{dbfile.name}"
 
 from app.main import app
+from app.main import local_today
 from app.db import Base, engine, SessionLocal
 from app.models import Food
 
@@ -32,6 +34,34 @@ def test_confirm_and_dashboard():
         dashboard = client.get('/api/dashboard').json()
         assert dashboard['totals']['kcal'] == 500
         assert dashboard['entries'][0]['source_reference'] == 'Synthetic test fixture'
+
+
+def test_dated_daily_targets_are_scoped_and_reject_past_date():
+    deadline = (local_today() + timedelta(days=90)).isoformat()
+    first = {'X-Visitor-Id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}
+    second = {'X-Visitor-Id': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'}
+    with TestClient(app) as client:
+        saved = client.put('/api/profile', headers=first, json={
+            'age': 25, 'height_cm': 170, 'weight_kg': 70, 'target_weight_kg': 67,
+            'target_date': deadline, 'sex': 'female', 'activity_level': 'moderate',
+            'goal': 'lose'})
+        assert saved.status_code == 200
+        targets = saved.json()['daily_targets']
+        assert targets['target_date'] == deadline
+        assert targets['days_remaining'] == 90
+        assert targets['kcal'] >= 1200
+        assert targets['protein_g'] == 110
+        assert client.get('/api/profile', headers=first).json()['daily_targets'] == targets
+        assert client.get('/api/profile', headers=second).json()['daily_targets'] is None
+        rushed = client.put('/api/profile', headers=first, json={
+            'age': 25, 'height_cm': 170, 'weight_kg': 70, 'target_weight_kg': 60,
+            'target_date': (local_today() + timedelta(days=7)).isoformat(),
+            'sex': 'female', 'activity_level': 'moderate', 'goal': 'lose'})
+        assert rushed.json()['daily_targets']['timeline_warning'] is True
+        assert rushed.json()['daily_targets']['kcal'] >= 1200
+        rejected = client.put('/api/profile', headers=first, json={
+            'target_date': local_today().isoformat()})
+        assert rejected.status_code == 422
 
 
 def test_scan_rejects_bad_upload():

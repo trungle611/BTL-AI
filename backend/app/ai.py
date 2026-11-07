@@ -11,7 +11,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SCAN_PROMPT_VERSION = "scan-v2-multi-dish"
 PLAN_PROMPT_VERSION = "plan-v1"
-GUIDANCE_PROMPT_VERSION = "profile-guidance-v1"
+GUIDANCE_PROMPT_VERSION = "profile-guidance-v2-targets"
 
 
 def client():
@@ -75,18 +75,21 @@ def generate_plan(foods, target_kcal):
     return json.loads(response.text)["days"]
 
 
-def generate_profile_guidance(profile, target_weight_kg, plan_names):
+def generate_profile_guidance(profile, target_weight_kg, plan_names, targets=None):
     ai = client()
     if ai is None:
         raise RuntimeError("Chưa cấu hình GEMINI_API_KEY")
     context = {"age": profile.age, "height_cm": profile.height_cm,
                "current_weight_kg": profile.weight_kg, "target_weight_kg": target_weight_kg,
+               "sex_for_estimate": profile.sex, "activity_level": profile.activity_level,
+               "daily_targets_estimate": targets,
                "avoid_ingredients": profile.avoid_tags or [], "available_workouts": plan_names}
     prompt = ("Bạn là trợ lý sức khỏe cho người trưởng thành. Đọc dữ liệu hồ sơ dưới đây và trả lời tiếng Việt. "
               "Đưa ra phân tích ngắn, hai cách ăn uống khác nhau với ví dụ món/bữa cụ thể, "
               "và một nhận xét ngắn cho PPL, một cho Upper/Lower để người dùng tự chọn. "
               "Ưu tiên ăn đủ chất và tập kháng lực phù hợp, không đề xuất ăn kiêng cực đoan, "
-              "không đưa kcal/ngày, tốc độ giảm/tăng cân hoặc chẩn đoán vì thiếu dữ liệu đánh giá. "
+              "Nếu có daily_targets_estimate, gợi ý món phù hợp với kcal và protein đó nhưng không tự đổi con số; "
+              "nếu thiếu, không tự đưa kcal/ngày. Không hứa đạt cân nặng đúng hạn, không chẩn đoán. "
               "Tôn trọng thành phần cần tránh. Nếu mục tiêu có vẻ không phù hợp, nói cần tham khảo chuyên gia. "
               f"Hồ sơ: {json.dumps(context, ensure_ascii=False)}")
     schema = {"type":"object","properties":{
