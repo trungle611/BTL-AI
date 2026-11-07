@@ -104,6 +104,42 @@ def test_repeated_confirmation_does_not_duplicate_meals():
         assert client.post('/api/food-logs/batch', json=changed).status_code == 409
 
 
+def test_custom_food_can_be_confirmed_and_replayed():
+    payload = {'confirmation_id':'custom-confirmation-001', 'items':[
+        {'custom_food':{'name':'Món mới kiểm thử','kcal_100g':120,'protein_100g':5,
+                        'carb_100g':15,'fat_100g':3},
+         'grams':200,'meal_type':'dinner','confirmed':True}]}
+    with TestClient(app) as client:
+        before = client.get('/api/dashboard').json()['totals']['kcal']
+        first = client.post('/api/food-logs/batch', json=payload)
+        assert first.status_code == 201
+        assert first.json()['entries'][0]['nutrition']['kcal'] == 240
+        assert first.json()['entries'][0]['is_verified'] is False
+        second = client.post('/api/food-logs/batch', json=payload)
+        assert second.json()['entries'][0]['id'] == first.json()['entries'][0]['id']
+        assert client.get('/api/dashboard').json()['totals']['kcal'] == before + 240
+        assert client.get('/api/foods', params={'q':'Món mới kiểm thử'}).json()[0]['source_type'] == 'user_entered'
+
+
+def test_workout_plan_selection_and_progress(monkeypatch):
+    from datetime import date
+    monkeypatch.setattr('app.main.local_today', lambda: date(2026, 11, 9))
+    with TestClient(app) as client:
+        plans = client.get('/api/workouts/plans').json()
+        assert {(plan['goal'], plan['method']) for plan in plans} == {
+            ('gain','PPL'),('gain','UL'),('lose','PPL'),('lose','UL')}
+        assert client.post('/api/workouts/select', json={'plan_id':'missing'}).status_code == 404
+        selected = client.post('/api/workouts/select', json={'plan_id':'gain_ppl'})
+        assert selected.status_code == 200
+        today = selected.json()
+        assert today['selected_plan']['id'] == 'gain_ppl'
+        assert today['items']
+        first_id = today['items'][0]['id']
+        assert client.post(f'/api/workouts/{first_id}/start').json()['items'][0]['status'] == 'started'
+        assert client.post(f'/api/workouts/{first_id}/complete').json()['items'][0]['status'] == 'completed'
+        assert client.get('/api/workouts/today').json()['items'][0]['status'] == 'completed'
+
+
 def test_profile_and_plan_fallback(monkeypatch):
     def ai_unavailable(*args, **kwargs):
         raise RuntimeError('AI unavailable in unit test')

@@ -16,7 +16,8 @@ from sqlalchemy.orm import Session, selectinload
 from . import ai
 from .core import fallback_plan, match_foods, normalize, nutrition, validate_plan
 from .db import Base, engine, get_db
-from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile, WorkoutProgress
+from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile, WorkoutProgress, WorkoutSelection
+from .workout_plans import PLANS, public_plan, today_items
 
 LOCAL_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -147,11 +148,23 @@ async def scan(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
 
 class LogIn(BaseModel):
-    food_id: str
+    food_id: str | None = None
+    custom_food: "CustomFoodIn | None" = None
     grams: float = Field(gt=0, le=2000)
     meal_type: str = Field(pattern="^(breakfast|lunch|dinner|snack)$")
     eaten_at: datetime | None = None
     confirmed: bool
+
+
+class CustomFoodIn(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    kcal_100g: float = Field(default=0, ge=0, le=900)
+    protein_100g: float = Field(default=0, ge=0, le=100)
+    carb_100g: float = Field(default=0, ge=0, le=100)
+    fat_100g: float = Field(default=0, ge=0, le=100)
+
+
+LogIn.model_rebuild()
 
 
 class BatchLogIn(BaseModel):
@@ -180,12 +193,30 @@ def add_logs_batch(payload: BatchLogIn, db: Session = Depends(get_db)):
     for item in payload.items:
         if not item.confirmed:
             raise HTTPException(422, "Cần xác nhận từng món và khẩu phần trước khi lưu")
-        food = db.get(Food, item.food_id)
-        if not food:
+        if bool(item.food_id) == bool(item.custom_food):
+            raise HTTPException(422, "Chọn món trong danh mục hoặc nhập một món mới")
+        food = db.get(Food, item.food_id) if item.food_id else None
+        if item.food_id and not food:
             raise HTTPException(404, f"Food ID không tồn tại: {item.food_id}")
         records.append((item, food))
     created = []
     for item, food in records:
+        if item.custom_food:
+            custom = item.custom_food
+            name = custom.name.strip()
+            if len(name) < 2:
+                raise HTTPException(422, "Tên món phải có ít nhất 2 ký tự")
+            food = db.scalar(select(Food).where(Food.name == name))
+            if food and food.source_type != "user_entered":
+                raise HTTPException(409, "Tên món đã có trong danh mục; hãy chọn món có sẵn")
+            if not food:
+                food = Food(id=f"user-{uuid.uuid4().hex[:32]}", name=name,
+                            kcal_100g=custom.kcal_100g, protein_100g=custom.protein_100g,
+                            carb_100g=custom.carb_100g, fat_100g=custom.fat_100g,
+                            source_type="user_entered", source_reference="Người dùng tự nhập; chưa kiểm chứng",
+                            reference_mass_g=100, data_version="user-v1", is_verified=False, avoid_tags=[])
+                db.add(food)
+                db.flush()
         log = FoodLog(food_id=food.id, grams=item.grams, meal_type=item.meal_type,
                       eaten_at=item.eaten_at or datetime.now(timezone.utc))
         db.add(log)
@@ -272,9 +303,34 @@ WORKOUTS = [
 
 
 def workout_data(db, day):
+    selection = db.get(WorkoutSelection, 1)
+    plan = next((plan for plan in PLANS if selection and plan["id"] == selection.plan_id), None)
+    items = today_items(plan, day.weekday()) if plan else WORKOUTS
     progress = {row.workout_id: row for row in db.scalars(select(WorkoutProgress).where(WorkoutProgress.day == day.isoformat()))}
-    return {"date": day.isoformat(), "items": [{**workout, "status": progress[workout["id"]].status if workout["id"] in progress else "not_started"}
-            for workout in WORKOUTS]}
+    return {"date": day.isoformat(), "selected_plan": public_plan(plan) if plan else None,
+            "session_name": plan["schedule"][day.weekday()] if plan else "Làm quen",
+            "items": [{**workout, "status": progress[workout["id"]].status if workout["id"] in progress else "not_started"}
+            for workout in items]}
+
+
+@app.get("/api/workouts/plans")
+def workout_plans():
+    return [public_plan(plan) for plan in PLANS]
+
+
+class WorkoutSelectIn(BaseModel):
+    plan_id: str
+
+
+@app.post("/api/workouts/select")
+def select_workout_plan(payload: WorkoutSelectIn, db: Session = Depends(get_db)):
+    if payload.plan_id not in {plan["id"] for plan in PLANS}:
+        raise HTTPException(404, "Không tìm thấy giáo án")
+    selection = db.get(WorkoutSelection, 1) or WorkoutSelection(id=1, plan_id=payload.plan_id)
+    selection.plan_id = payload.plan_id
+    db.add(selection)
+    db.commit()
+    return workout_data(db, local_today())
 
 
 @app.get("/api/workouts/today")
@@ -284,7 +340,7 @@ def workouts_today(db: Session = Depends(get_db)):
 
 @app.post("/api/workouts/{workout_id}/{action}")
 def workout_action(workout_id: str, action: str, db: Session = Depends(get_db)):
-    if workout_id not in {item["id"] for item in WORKOUTS}:
+    if workout_id not in {item["id"] for item in workout_data(db, local_today())["items"]}:
         raise HTTPException(404, "Không tìm thấy bài tập")
     if action not in {"start", "complete"}:
         raise HTTPException(422, "Thao tác không hợp lệ")

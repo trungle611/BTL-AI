@@ -4,6 +4,7 @@ import {Bell, CalendarDays, ChevronDown, CircleUserRound, Dumbbell, House, Menu,
 import ScanSection from './ScanSection.jsx';
 import TodayMeals from './TodayMeals.jsx';
 import WorkoutPanel from './WorkoutPanel.jsx';
+import WorkoutPlans from './WorkoutPlans.jsx';
 import './style.css';
 
 const API=import.meta.env.VITE_API_URL||'http://localhost:8000';
@@ -42,6 +43,7 @@ function App() {
   const [foods,setFoods]=useState([]);
   const [dashboard,setDashboard]=useState(null);
   const [workouts,setWorkouts]=useState(null);
+  const [plans,setPlans]=useState([]);
   const [profile,setProfile]=useState({age:null,height_cm:null,weight_kg:null,goal:'maintain',avoid_tags:[],target_kcal:1800});
   const [notice,setNotice]=useState('');
   const [showBell,setShowBell]=useState(false);
@@ -52,19 +54,19 @@ function App() {
     setFoods(catalog);setDashboard(day);setWorkouts(training);
   }
   useEffect(()=>{
-    Promise.all([refresh(),call('/api/profile').then(setProfile)]).catch(error=>setNotice(error.message));
+    Promise.all([refresh(),call('/api/profile').then(setProfile),call('/api/workouts/plans').then(setPlans)]).catch(error=>setNotice(error.message));
   },[]);
   function go(id){setSection(id);setNavOpen(false);setNotice('');}
   const dateLabel=new Intl.DateTimeFormat('vi-VN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date());
   const title={home:'Tổng quan hôm nay',food:'Ăn uống',workout:'Tập luyện',profile:'Cá nhân'}[section];
-  const subtitle={home:'Theo dõi bữa ăn và kế hoạch tập luyện của bạn trong một nơi.',food:'Nhận diện món ăn, xác nhận khẩu phần và theo dõi thực đơn.',workout:'Xem kế hoạch hôm nay và đánh dấu tiến độ từng bài tập.',profile:'Cập nhật thông tin và mục tiêu cá nhân.'}[section];
+  const subtitle={home:'Nhận diện món ăn và theo dõi thực đơn hôm nay.',food:'Nhận diện món ăn, xác nhận khẩu phần và theo dõi thực đơn.',workout:'Chọn phương pháp PPL hoặc Upper/Lower theo mục tiêu và theo dõi buổi tập.',profile:'Cập nhật thông tin và mục tiêu cá nhân.'}[section];
 
   return <div className="app-shell">
-    <header className="topbar"><div className="topbar-inner"><button className="menu-toggle" aria-label="Mở điều hướng" onClick={()=>setNavOpen(!navOpen)}><Menu size={22}/></button><button className="brand" onClick={()=>go('home')} aria-label="Về trang chủ HBTNFIT"><span className="brand-mark">H<span>+</span></span><span className="brand-name">HBTNFIT</span></button><span className="topbar-caption">Sống khỏe theo cách của bạn</span><div className="top-actions"><div className="notification-wrap"><button className="header-icon" aria-label="Thông báo" aria-expanded={showBell} onClick={()=>setShowBell(!showBell)}><Bell size={19}/></button>{showBell&&<div className="notification-popover">Chưa có thông báo mới.</div>}</div><button className="account-button" onClick={()=>go('profile')}><span className="avatar">U</span><span>Tài khoản demo</span><ChevronDown size={15}/></button></div></div></header>
+    <header className="topbar"><div className="topbar-inner"><button className="menu-toggle" aria-label="Mở điều hướng" onClick={()=>setNavOpen(!navOpen)}><Menu size={22}/></button><button className="brand" onClick={()=>go('home')} aria-label="Về trang chủ HBTNFIT"><img className="brand-logo" src="/dai-hoc-cong-nghe-logo.png" alt="Logo Đại học Công nghệ"/><span className="brand-name">HBTNFIT</span></button><span className="topbar-caption">Sống khỏe theo cách của bạn</span><div className="top-actions"><div className="notification-wrap"><button className="header-icon" aria-label="Thông báo" aria-expanded={showBell} onClick={()=>setShowBell(!showBell)}><Bell size={19}/></button>{showBell&&<div className="notification-popover">Chưa có thông báo mới.</div>}</div><button className="account-button" onClick={()=>go('profile')}><span className="avatar">U</span><span>Tài khoản demo</span><ChevronDown size={15}/></button></div></div></header>
     <div className="body-layout"><aside className={`sidebar ${navOpen?'open':''}`}><div className="sidebar-group"><span className="sidebar-label">ĐIỀU HƯỚNG</span><nav aria-label="Điều hướng chính">{navigation.map(item=>{const Icon=item.icon;return <button key={item.id} className={`nav-item ${section===item.id?'active':''}`} onClick={()=>go(item.id)} title={item.label}><Icon size={19}/><span>{item.label}</span></button>;})}</nav></div><div className="sidebar-bottom"><div className="sidebar-note"><span className="status-dot"/> Bản dùng thử Track 1</div><small>HBTNFIT · 2026</small></div></aside>
       <main className="content"><div className="page-intro"><div><div className="date-line"><CalendarDays size={15}/>{dateLabel}</div><h1>{title}</h1><p>{subtitle}</p></div><span className="demo-badge">PHIÊN BẢN ĐẦU TIÊN</span></div>{notice&&<div className="global-notice" role="alert">{notice}<button aria-label="Đóng thông báo" onClick={()=>setNotice('')}>×</button></div>}
-        {(section==='home'||section==='food')&&<div className="dashboard-grid"><div className="main-column"><ScanSection call={call} foods={foods} onAdded={refresh}/></div><div className="side-column"><TodayMeals dashboard={dashboard} call={call} refresh={refresh} onError={setNotice}/><WorkoutPanel workouts={workouts} call={call} refresh={refresh} onError={setNotice} compact/></div></div>}
-        {section==='workout'&&<div className="single-column"><WorkoutPanel workouts={workouts} call={call} refresh={refresh} onError={setNotice}/></div>}
+        {(section==='home'||section==='food')&&<div className="dashboard-grid"><div className="main-column"><ScanSection call={call} foods={foods} onAdded={refresh}/></div><div className="side-column"><TodayMeals dashboard={dashboard} call={call} refresh={refresh} onError={setNotice}/></div></div>}
+        {section==='workout'&&<div className="training-page"><WorkoutPlans plans={plans} selectedId={workouts?.selected_plan?.id} call={call} refresh={refresh} onError={setNotice}/><WorkoutPanel workouts={workouts} call={call} refresh={refresh} onError={setNotice}/></div>}
         {section==='profile'&&<div className="single-column"><ProfilePanel profile={profile} setProfile={setProfile} call={call} onError={setNotice}/></div>}
         <footer className="app-footer">Thông tin dinh dưỡng và bài tập chỉ mang tính tham khảo. Dữ liệu món demo chưa được kiểm chứng.</footer>
       </main>

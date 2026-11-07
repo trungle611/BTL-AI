@@ -102,6 +102,12 @@ class WorkoutProgress(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class WorkoutSelection(Base):
+    __tablename__ = "workout_selection"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    plan_id: Mapped[str] = mapped_column(String(40))
+
+
 class BatchSubmission(Base):
     __tablename__ = "batch_submissions"
     confirmation_id: Mapped[str] = mapped_column(String(80), primary_key=True)

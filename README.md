@@ -1,6 +1,6 @@
 # HBTNFIT Track 1
 
-Bản demo đầu tiên tập trung vào **Ăn uống** và **Tập luyện**. Gemini gợi ý tối đa 5 món trong một ảnh; người dùng chỉnh khẩu phần, xác nhận rồi mới thêm vào thực đơn hôm nay. Bài tập có thể xem chi tiết, bắt đầu và đánh dấu hoàn thành. API lập thực đơn 7 ngày từ đề xuất trước vẫn còn trong backend, nhưng chưa nằm trong giao diện phiên bản này. Xem [đặc tả UI phiên bản đầu](docs/UI_V1.md).
+Bản demo đầu tiên tập trung vào **Ăn uống** và **Tập luyện**. Gemini gợi ý tối đa 5 món trong một ảnh; người dùng chỉnh khẩu phần, xác nhận rồi mới thêm vào thực đơn hôm nay. Món ngoài danh mục cũng có thể tự nhập và xác nhận. Trang tập luyện riêng có giáo án PPL và Upper/Lower theo mục tiêu tăng cơ hoặc giảm cân. API lập thực đơn 7 ngày từ đề xuất trước vẫn còn trong backend, nhưng chưa nằm trong giao diện phiên bản này. Xem [đặc tả UI phiên bản đầu](docs/UI_V1.md).
 
 Đây là mã nguồn chạy thử, chưa có bộ dữ liệu dinh dưỡng đã kiểm chứng, bộ ảnh đánh giá hay kết quả thực nghiệm thật.
 
@@ -31,7 +31,7 @@ Mở `http://localhost:5173`. API docs ở `http://localhost:8000/docs`.
 
 ## Xem demo
 
-Sau khi chạy hai terminal trên, mở `http://localhost:5173`. Kéo thả ảnh hoặc bấm **Tải ảnh**; ứng dụng tự gửi ảnh cho Gemini và hiển thị trạng thái phân tích. Có thể dùng **Một món** hoặc **Hai món** ở mục ảnh thử nhanh. Chọn món Gemini gợi ý, chỉnh gam và bữa ăn rồi bấm **Xác nhận thêm**; thực đơn bên phải chỉ cộng sau bước này. Nếu gợi ý sai, bấm **Gợi ý chưa đúng? Nhập tay** để tìm trong danh mục. Có thể đổi/xóa ảnh, thêm món AI bỏ sót, sửa/xóa món đã lưu. Ở **Tập luyện**, mở chi tiết từng bài, bắt đầu và đánh dấu hoàn thành. Ảnh trong `demo/` được tạo bằng AI để thử giao diện, không dùng làm mẫu đánh giá độ chính xác.
+Sau khi chạy hai terminal trên, mở `http://localhost:5173`. Kéo thả ảnh hoặc bấm **Tải ảnh**; ứng dụng tự gửi ảnh cho Gemini và hiển thị trạng thái phân tích. Có thể dùng **Một món** hoặc **Hai món** ở mục ảnh thử nhanh. Chọn món Gemini gợi ý, chỉnh gam và bữa ăn rồi bấm **Xác nhận thêm**; thực đơn bên phải chỉ cộng sau bước này. Nếu gợi ý sai, bấm **Gợi ý chưa đúng? Nhập tay** để tìm trong danh mục hoặc xác nhận món chưa có. Dinh dưỡng món mới nhập theo 100 g; có thể để trống và được đánh dấu chưa kiểm chứng. Có thể đổi/xóa ảnh, thêm món AI bỏ sót, sửa/xóa món đã lưu. Ở **Tập luyện**, chọn giáo án rồi mở chi tiết từng bài, bắt đầu và đánh dấu hoàn thành. Ảnh trong `demo/` được tạo bằng AI để thử giao diện, không dùng làm mẫu đánh giá độ chính xác.
 
 ## Dữ liệu
 

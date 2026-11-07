@@ -3,7 +3,7 @@ import {AlertCircle, Check, CheckCircle2, CloudUpload, ImagePlus, LoaderCircle, 
 
 const fmt = value => Number(value || 0).toLocaleString('vi-VN',{maximumFractionDigits:1});
 const mealLabels = {breakfast:'Bữa sáng',lunch:'Bữa trưa',dinner:'Bữa tối',snack:'Bữa phụ'};
-const emptyItem = (manual=false) => ({foodId:'',grams:250,manual,search:'',skipped:false});
+const emptyItem = (manual=false) => ({foodId:'',grams:250,manual,search:'',custom:false,skipped:false,kcal:'',protein:'',carb:'',fat:''});
 
 export default function ScanSection({call,foods,onAdded}) {
   const picker = useRef(null);
@@ -29,7 +29,7 @@ export default function ScanSection({call,foods,onAdded}) {
       const form=new FormData();form.append('file',selected);
       const result=await call('/api/scan',{method:'POST',body:form});
       setScan(result);
-      setItems(result.dishes.map(dish=>emptyItem(dish.candidates.length===0)));
+      setItems(result.dishes.map(dish=>dish.candidates.length===0?{...emptyItem(true),search:dish.suggested_labels[0]||'',custom:true}:emptyItem(false)));
       if(result.status==='unknown')setError('Chưa nhận diện được món trong danh mục. Bạn có thể tìm tên món thủ công.');
     } catch(err) {
       setError(`${err.message}. Bạn có thể thử lại hoặc nhập món thủ công.`);
@@ -46,12 +46,12 @@ export default function ScanSection({call,foods,onAdded}) {
   }
 
   const active=items.filter(item=>!item.skipped);
-  const ready=active.length>0&&active.every(item=>item.foodId&&Number(item.grams)>0&&Number(item.grams)<=2000);
+  const ready=active.length>0&&active.every(item=>(item.foodId||(item.custom&&item.search.trim().length>=2))&&Number(item.grams)>0&&Number(item.grams)<=2000);
   async function save() {
     if(!ready)return;
     setBusy(true);setError('');
     try {
-      await call('/api/food-logs/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation_id:scan.request_id,items:active.map(item=>({food_id:item.foodId,grams:Number(item.grams),meal_type:mealType,confirmed:true}))})});
+      await call('/api/food-logs/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation_id:scan.request_id,items:active.map(item=>({food_id:item.custom?null:item.foodId,custom_food:item.custom?{name:item.search.trim(),...Object.fromEntries(['kcal','protein','carb','fat'].map(key=>[`${key}_100g`,Number(item[key]||0)]))}:null,grams:Number(item.grams),meal_type:mealType,confirmed:true}))})});
       clearPhoto();setSuccess(`Đã thêm ${active.length} món vào thực đơn hôm nay.`);await onAdded();
     } catch(err){setError(err.message);} finally{setBusy(false);}
   }
@@ -78,7 +78,7 @@ export default function ScanSection({call,foods,onAdded}) {
         const item=items[index];if(!item)return null;
         const selected=foods.find(food=>food.id===item.foodId);
         const previewFood=selected||(!item.manual?dish.candidates[0]:null);
-        const values=previewFood?Object.fromEntries(['kcal','protein','carb','fat'].map(key=>[key,previewFood[`${key}_100g`]*Number(item.grams||0)/100])):null;
+        const values=item.custom?Object.fromEntries(['kcal','protein','carb','fat'].map(key=>[key,Number(item[key]||0)*Number(item.grams||0)/100])):previewFood?Object.fromEntries(['kcal','protein','carb','fat'].map(key=>[key,previewFood[`${key}_100g`]*Number(item.grams||0)/100])):null;
         const query=item.search.toLocaleLowerCase('vi');
         const filtered=foods.filter(food=>!query||food.name.toLocaleLowerCase('vi').includes(query)||food.aliases.some(alias=>alias.toLocaleLowerCase('vi').includes(query)));
         return <div className={`recognized-dish ${item.skipped?'is-skipped':''}`} key={index}>
@@ -87,10 +87,10 @@ export default function ScanSection({call,foods,onAdded}) {
             {dish.visible_ingredients.length>0&&<p className="observed">Nhìn thấy: {dish.visible_ingredients.join(', ')}</p>}
             {dish.uncertainty_reason&&<p className="observed">{dish.uncertainty_reason}</p>}
             {!item.manual&&dish.candidates.length>0&&<div className="choice-grid" role="group" aria-label={`Gợi ý món ${index+1}`}>{dish.candidates.map(food=><button key={food.id} className={`food-choice ${item.foodId===food.id?'chosen':''}`} aria-pressed={item.foodId===food.id} onClick={()=>update(index,{foodId:food.id})}><span>{food.name}</span>{item.foodId===food.id&&<Check size={17}/>}</button>)}</div>}
-            {!item.manual&&<button className="link-button" onClick={()=>update(index,{manual:true,foodId:''})}><Search size={15}/> Gợi ý chưa đúng? Nhập tay</button>}
-            {item.manual&&<div className="manual-fields"><label>Tên món bạn nhận ra<input value={item.search} onChange={event=>update(index,{search:event.target.value,foodId:''})} placeholder="Nhập tên để tìm trong danh mục"/></label><label>Chọn món phù hợp<select value={item.foodId} onChange={event=>update(index,{foodId:event.target.value})}><option value="">Chọn món</option>{filtered.map(food=><option key={food.id} value={food.id}>{food.name}</option>)}</select></label>{filtered.length===0&&<p className="data-note">Danh mục chưa có món này; cần bổ sung dữ liệu trước khi tính dinh dưỡng.</p>}{dish.candidates.length>0&&<button className="link-button" onClick={()=>update(index,{manual:false,foodId:'',search:''})}><X size={15}/> Quay lại gợi ý</button>}</div>}
+            {!item.manual&&<button className="link-button" onClick={()=>update(index,{manual:true,foodId:'',search:dish.suggested_labels[0]||''})}><Search size={15}/> Gợi ý chưa đúng? Nhập tay</button>}
+            {item.manual&&<div className="manual-fields"><label>Tên món bạn nhận ra<input value={item.search} onChange={event=>update(index,{search:event.target.value,foodId:'',custom:true})} placeholder="Nhập tên món"/></label>{filtered.length>0&&<label>Hoặc chọn món trong danh mục<select value={item.custom?'':item.foodId} onChange={event=>update(index,{foodId:event.target.value,custom:false})}><option value="">Chọn món</option>{filtered.map(food=><option key={food.id} value={food.id}>{food.name}</option>)}</select></label>}<label className="custom-choice"><input type="checkbox" checked={item.custom} onChange={event=>update(index,{custom:event.target.checked,foodId:''})}/> Món chưa có trong danh mục — tự xác nhận tên và dinh dưỡng</label>{item.custom&&<><div className="custom-macros">{[['kcal','Calo (kcal)'],['protein','Protein (g)'],['carb','Carb (g)'],['fat','Chất béo (g)']].map(([key,label])=><label key={key}>{label} / 100 g<input type="number" min="0" step="0.1" value={item[key]} onChange={event=>update(index,{[key]:event.target.value})} placeholder="0"/></label>)}</div><p className="data-note">Nhập số liệu trên 100 g; kết quả sẽ đổi theo khẩu phần. Để trống sẽ lưu 0. Dữ liệu tự nhập chưa được kiểm chứng.</p></>}{dish.candidates.length>0&&<button className="link-button" onClick={()=>update(index,{manual:false,custom:false,foodId:'',search:''})}><X size={15}/> Quay lại gợi ý</button>}</div>}
             <div className="result-fields"><label>Khẩu phần<input type="number" min="1" max="2000" value={item.grams} onChange={event=>update(index,{grams:event.target.value})}/></label><span className="unit-label">gram</span></div>
-            {values&&<><div className={`food-nutrition ${!selected?'preview-values':''}`}><div><b>{fmt(values.kcal)}</b><span>kcal</span></div><div><b>{fmt(values.protein)}g</b><span>Protein</span></div><div><b>{fmt(values.carb)}g</b><span>Carb</span></div><div><b>{fmt(values.fat)}g</b><span>Chất béo</span></div></div>{!selected&&<p className="source-note">Ước tính theo gợi ý đầu tiên; chưa cộng vào thực đơn.</p>}</>}
+            {values&&<><div className={`food-nutrition ${!selected?'preview-values':''}`}><div><b>{fmt(values.kcal)}</b><span>kcal</span></div><div><b>{fmt(values.protein)}g</b><span>Protein</span></div><div><b>{fmt(values.carb)}g</b><span>Carb</span></div><div><b>{fmt(values.fat)}g</b><span>Chất béo</span></div></div>{!selected&&!item.custom&&<p className="source-note">Ước tính theo gợi ý đầu tiên; chưa cộng vào thực đơn.</p>}</>}
             {previewFood&&<p className="source-note">Nguồn: {previewFood.source_reference}{!previewFood.is_verified&&' · Dữ liệu demo chưa kiểm chứng'}</p>}
           </>}
         </div>;
