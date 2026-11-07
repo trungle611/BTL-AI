@@ -15,8 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 from . import ai
 from .core import fallback_plan, match_foods, normalize, nutrition, validate_plan
-from .db import Base, engine, get_db
-from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile, WorkoutProgress, WorkoutSelection, WorkoutVisit
+from .db import Base, engine, get_db, migrate_demo_columns
+from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile, ProfileGuidance, WorkoutProgress, WorkoutSelection, WorkoutVisit
 from .workout_plans import PLANS, public_plan, session_items
 
 LOCAL_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -34,15 +34,47 @@ def local_date(value):
 @asynccontextmanager
 async def lifespan(app):
     Base.metadata.create_all(engine)
+    migrate_demo_columns()
+    if os.getenv("SEED_DEMO") == "1":
+        from .seed_demo import seed
+        seed()
     yield
 
 
 app = FastAPI(title="HBTNFIT API", version="0.1.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://localhost:5175", "http://127.0.0.1:5175"], allow_methods=["*"], allow_headers=["*"])
+LOCAL_ORIGINS = [f"http://{host}:{port}" for host in ("localhost", "127.0.0.1") for port in (5173, 5174, 5175)]
+PUBLIC_ORIGINS = [origin.strip() for origin in os.getenv("FRONTEND_ORIGINS", "").split(",") if origin.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=LOCAL_ORIGINS + PUBLIC_ORIGINS,
+                   allow_origin_regex=r"https://[a-z0-9-]+\.vercel\.app" if os.getenv("ALLOW_VERCEL_PREVIEWS") == "1" else None,
+                   allow_methods=["*"], allow_headers=["*"])
+
+
+def visitor(db):
+    return db.info["visitor_id"]
+
+
+def scoped_key(db, value):
+    return hashlib.sha1(f"{visitor(db)}:{value}".encode()).hexdigest()
+
+
+def visible_food(food, db):
+    return food is not None and (food.owner_id is None or food.owner_id == visitor(db))
+
+
+def profile_record(db):
+    return db.scalar(select(Profile).where(Profile.visitor_id == visitor(db)))
+
+
+def guidance_record(db):
+    return db.scalar(select(ProfileGuidance).where(ProfileGuidance.visitor_id == visitor(db)))
+
+
+def selection_record(db):
+    return db.scalar(select(WorkoutSelection).where(WorkoutSelection.visitor_id == visitor(db)))
 
 
 def food_data(food):
-    return {"id": food.id, "name": food.name, "kcal_100g": food.kcal_100g,
+    return {"id": food.id, "name": food.display_name or food.name, "kcal_100g": food.kcal_100g,
             "protein_100g": food.protein_100g, "carb_100g": food.carb_100g,
             "fat_100g": food.fat_100g, "source_type": food.source_type,
             "source_reference": food.source_reference, "reference_mass_g": food.reference_mass_g,
@@ -59,46 +91,126 @@ class ProfileIn(BaseModel):
     age: int | None = Field(default=None, ge=18, le=120)
     height_cm: float | None = Field(default=None, ge=100, le=250)
     weight_kg: float | None = Field(default=None, ge=25, le=400)
+    target_weight_kg: float | None = Field(default=None, ge=25, le=400)
     goal: str = Field(default="maintain", pattern="^(maintain|gain|lose)$")
     avoid_tags: list[str] = []
     target_kcal: float = Field(default=1800, ge=900, le=5000)
 
 
-def profile_data(profile):
+def profile_data(profile, guidance=None):
     return {"age": profile.age, "height_cm": profile.height_cm,
             "weight_kg": profile.weight_kg, "goal": profile.goal,
-            "avoid_tags": profile.avoid_tags or [], "target_kcal": profile.target_kcal}
+            "avoid_tags": profile.avoid_tags or [], "target_kcal": profile.target_kcal,
+            "target_weight_kg": guidance.target_weight_kg if guidance else None,
+            "analysis": guidance.analysis if guidance else None,
+            "food_choice": guidance.food_choice if guidance else None,
+            "workout_choice": guidance.workout_choice if guidance else None}
 
 
 @app.get("/api/profile")
 def get_profile(db: Session = Depends(get_db)):
-    profile = db.get(Profile, 1)
-    return profile_data(profile) if profile else ProfileIn().model_dump()
+    profile = profile_record(db)
+    return profile_data(profile, guidance_record(db)) if profile else ProfileIn().model_dump() | {"analysis":None,"food_choice":None,"workout_choice":None}
 
 
 @app.put("/api/profile")
 def save_profile(payload: ProfileIn, db: Session = Depends(get_db)):
-    profile = db.get(Profile, 1) or Profile(id=1)
-    for key, value in payload.model_dump().items():
+    profile = profile_record(db) or Profile(visitor_id=visitor(db))
+    guidance = guidance_record(db) or ProfileGuidance(visitor_id=visitor(db))
+    if (profile.weight_kg != payload.weight_kg or guidance.target_weight_kg != payload.target_weight_kg
+            or profile.avoid_tags != payload.avoid_tags or profile.age != payload.age
+            or profile.height_cm != payload.height_cm or profile.goal != payload.goal):
+        guidance.analysis = None
+        guidance.food_choice = None
+        guidance.workout_choice = None
+    guidance.target_weight_kg = payload.target_weight_kg
+    for key, value in payload.model_dump(exclude={"target_weight_kg"}).items():
         setattr(profile, key, value)
     db.add(profile)
+    db.add(guidance)
     db.commit()
-    return profile_data(profile)
+    return profile_data(profile, guidance)
+
+
+@app.post("/api/profile/analyze")
+def analyze_profile(db: Session = Depends(get_db)):
+    profile = profile_record(db)
+    guidance = guidance_record(db)
+    if not profile or not guidance or profile.weight_kg is None or guidance.target_weight_kg is None:
+        raise HTTPException(422, "Hãy lưu cân nặng hiện tại và cân nặng mong muốn trước")
+    goal = "gain" if guidance.target_weight_kg > profile.weight_kg + 0.5 else "lose" if guidance.target_weight_kg < profile.weight_kg - 0.5 else (profile.goal if profile.goal != "maintain" else "gain")
+    options = [plan for plan in PLANS if plan["goal"] == goal]
+    started = perf_counter()
+    try:
+        generated = ai.generate_profile_guidance(profile, guidance.target_weight_kg, [plan["name"] for plan in options])
+        food_options = generated.get("food_options", [])[:2]
+        if len(food_options) != 2 or any(not item.get("title") or not item.get("detail") for item in food_options):
+            raise ValueError("AI chưa trả đủ phương án")
+        analysis = {"summary": generated["summary"][:700],
+                    "food_options": [{"id": f"food_{index+1}", "title": item["title"][:100],
+                                      "detail": item["detail"][:500], "examples": item.get("examples", [])[:4]}
+                                     for index, item in enumerate(food_options)],
+                    "workout_options": [{"id": plan["id"], "name": plan["name"],
+                                         "detail": generated["ppl_note" if plan["method"] == "PPL" else "ul_note"][:500]}
+                                        for plan in options],
+                    "model": os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")}
+        status = "ok"
+    except Exception as exc:
+        status = "error"
+        raise HTTPException(503, "Chưa tạo được phân tích AI. Hãy thử lại sau") from exc
+    finally:
+        db.add(AiRun(purpose="profile", prompt_version=ai.GUIDANCE_PROMPT_VERSION,
+                     model_id=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+                     latency_ms=round((perf_counter()-started)*1000), status=status))
+        db.commit()
+    guidance.analysis = analysis
+    guidance.food_choice = None
+    guidance.workout_choice = None
+    db.commit()
+    return profile_data(profile, guidance)
+
+
+class GuidanceChoiceIn(BaseModel):
+    food_choice: str | None = None
+    workout_choice: str | None = None
+
+
+@app.post("/api/profile/choice")
+def choose_guidance(payload: GuidanceChoiceIn, db: Session = Depends(get_db)):
+    guidance = guidance_record(db)
+    profile = profile_record(db)
+    if not profile or not guidance or not guidance.analysis:
+        raise HTTPException(409, "Hãy tạo phân tích AI trước")
+    if not payload.food_choice and not payload.workout_choice:
+        raise HTTPException(422, "Hãy chọn một phương án")
+    if payload.food_choice:
+        if payload.food_choice not in {item["id"] for item in guidance.analysis["food_options"]}:
+            raise HTTPException(422, "Phương án ăn uống không hợp lệ")
+        guidance.food_choice = payload.food_choice
+    if payload.workout_choice:
+        if payload.workout_choice not in {item["id"] for item in guidance.analysis["workout_options"]}:
+            raise HTTPException(422, "Giáo án không hợp lệ")
+        guidance.workout_choice = payload.workout_choice
+        selection = selection_record(db) or WorkoutSelection(visitor_id=visitor(db), plan_id=payload.workout_choice)
+        selection.plan_id = payload.workout_choice
+        db.add(selection)
+    db.commit()
+    return profile_data(profile, guidance)
 
 
 @app.get("/api/foods")
 def foods(q: str = "", db: Session = Depends(get_db)):
-    records = db.scalars(select(Food).options(selectinload(Food.aliases))).all()
+    records = db.scalars(select(Food).where((Food.owner_id.is_(None)) | (Food.owner_id == visitor(db))).options(selectinload(Food.aliases))).all()
     if q:
         query = normalize(q)
-        records = [f for f in records if any(query in normalize(n) for n in [f.name] + [a.alias for a in f.aliases])]
+        records = [f for f in records if any(query in normalize(n) for n in [f.display_name or f.name] + [a.alias for a in f.aliases])]
     return [food_data(f) for f in records[:200]]
 
 
 @app.get("/api/foods/{food_id}")
 def get_food(food_id: str, db: Session = Depends(get_db)):
     food = db.scalar(select(Food).where(Food.id == food_id).options(selectinload(Food.aliases)))
-    if not food:
+    if not visible_food(food, db):
         raise HTTPException(404, "Không tìm thấy món")
     return food_data(food)
 
@@ -131,7 +243,7 @@ async def scan(file: UploadFile = File(...), db: Session = Depends(get_db)):
                      model_id=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
                      latency_ms=round((perf_counter() - started) * 1000), status=status))
         db.commit()
-    records = db.scalars(select(Food).options(selectinload(Food.aliases))).all()
+    records = db.scalars(select(Food).where((Food.owner_id.is_(None)) | (Food.owner_id == visitor(db))).options(selectinload(Food.aliases))).all()
     dishes = []
     for item in result.get("dishes", [])[:5]:
         labels = [label for label in item.get("candidate_labels", [])[:3] if isinstance(label, str)]
@@ -173,7 +285,7 @@ class BatchLogIn(BaseModel):
 
 
 def log_response(log, food):
-    return {"id": log.id, "food_id": food.id, "name": food.name,
+    return {"id": log.id, "food_id": food.id, "name": food.display_name or food.name,
             "grams": log.grams, "nutrition": nutrition(food, log.grams),
             "source_reference": food.source_reference, "is_verified": food.is_verified}
 
@@ -182,13 +294,14 @@ def log_response(log, food):
 def add_logs_batch(payload: BatchLogIn, db: Session = Depends(get_db)):
     request_hash = hashlib.sha256(json.dumps([item.model_dump(mode="json") for item in payload.items],
                                             ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-    if payload.confirmation_id:
-        prior = db.get(BatchSubmission, payload.confirmation_id)
+    submission_key = scoped_key(db, payload.confirmation_id) if payload.confirmation_id else None
+    if submission_key:
+        prior = db.get(BatchSubmission, submission_key)
         if prior:
             if prior.request_hash != request_hash:
                 raise HTTPException(409, "Mã xác nhận đã dùng với nội dung khác")
             logs = [db.get(FoodLog, log_id) for log_id in prior.log_ids]
-            return {"entries": [log_response(log, db.get(Food, log.food_id)) for log in logs if log]}
+            return {"entries": [log_response(log, db.get(Food, log.food_id)) for log in logs if log and log.visitor_id == visitor(db)]}
     records = []
     for item in payload.items:
         if not item.confirmed:
@@ -196,7 +309,7 @@ def add_logs_batch(payload: BatchLogIn, db: Session = Depends(get_db)):
         if bool(item.food_id) == bool(item.custom_food):
             raise HTTPException(422, "Chọn món trong danh mục hoặc nhập một món mới")
         food = db.get(Food, item.food_id) if item.food_id else None
-        if item.food_id and not food:
+        if item.food_id and not visible_food(food, db):
             raise HTTPException(404, f"Food ID không tồn tại: {item.food_id}")
         records.append((item, food))
     created = []
@@ -206,24 +319,28 @@ def add_logs_batch(payload: BatchLogIn, db: Session = Depends(get_db)):
             name = custom.name.strip()
             if len(name) < 2:
                 raise HTTPException(422, "Tên món phải có ít nhất 2 ký tự")
-            food = db.scalar(select(Food).where(Food.name == name))
+            food = db.scalar(select(Food).where(Food.owner_id == visitor(db), Food.display_name == name))
+            catalog_food = db.scalar(select(Food).where(Food.owner_id.is_(None), Food.name == name))
+            if catalog_food:
+                raise HTTPException(409, "Tên món đã có trong danh mục; hãy chọn món có sẵn")
             if food and food.source_type != "user_entered":
                 raise HTTPException(409, "Tên món đã có trong danh mục; hãy chọn món có sẵn")
             if not food:
-                food = Food(id=f"user-{uuid.uuid4().hex[:32]}", name=name,
+                food = Food(id=f"user-{uuid.uuid4().hex[:32]}", name=f"{name[:130]} [{uuid.uuid4().hex[:12]}]",
+                            display_name=name, owner_id=visitor(db),
                             kcal_100g=custom.kcal_100g, protein_100g=custom.protein_100g,
                             carb_100g=custom.carb_100g, fat_100g=custom.fat_100g,
                             source_type="user_entered", source_reference="Người dùng tự nhập; chưa kiểm chứng",
                             reference_mass_g=100, data_version="user-v1", is_verified=False, avoid_tags=[])
                 db.add(food)
                 db.flush()
-        log = FoodLog(food_id=food.id, grams=item.grams, meal_type=item.meal_type,
+        log = FoodLog(food_id=food.id, visitor_id=visitor(db), grams=item.grams, meal_type=item.meal_type,
                       eaten_at=item.eaten_at or datetime.now(timezone.utc))
         db.add(log)
         created.append((log, food))
     db.flush()
-    if payload.confirmation_id:
-        db.add(BatchSubmission(confirmation_id=payload.confirmation_id,
+    if submission_key:
+        db.add(BatchSubmission(confirmation_id=submission_key,
                                request_hash=request_hash, log_ids=[log.id for log, _ in created]))
     db.commit()
     return {"entries": [log_response(log, food) for log, food in created]}
@@ -234,14 +351,14 @@ def add_log(payload: LogIn, db: Session = Depends(get_db)):
     if not payload.confirmed:
         raise HTTPException(422, "Cần xác nhận món và khẩu phần trước khi lưu")
     food = db.get(Food, payload.food_id)
-    if not food:
+    if not visible_food(food, db):
         raise HTTPException(404, "Food ID không tồn tại")
-    record = FoodLog(food_id=food.id, grams=payload.grams, meal_type=payload.meal_type,
+    record = FoodLog(food_id=food.id, visitor_id=visitor(db), grams=payload.grams, meal_type=payload.meal_type,
                      eaten_at=payload.eaten_at or datetime.now(timezone.utc))
     db.add(record)
     db.commit()
     db.refresh(record)
-    return {"id": record.id, "food_id": food.id, "name": food.name, "grams": record.grams,
+    return {"id": record.id, "food_id": food.id, "name": food.display_name or food.name, "grams": record.grams,
             "nutrition": nutrition(food, record.grams), "source_reference": food.source_reference,
             "is_verified": food.is_verified}
 
@@ -254,14 +371,14 @@ class LogUpdate(BaseModel):
 @app.patch("/api/food-logs/{log_id}")
 def update_log(log_id: int, payload: LogUpdate, db: Session = Depends(get_db)):
     log = db.get(FoodLog, log_id)
-    if not log:
+    if not log or log.visitor_id != visitor(db):
         raise HTTPException(404, "Không tìm thấy món trong nhật ký")
     log.grams = payload.grams
     log.meal_type = payload.meal_type
     db.commit()
     db.refresh(log)
     food = db.get(Food, log.food_id)
-    return {"id": log.id, "food_id": food.id, "name": food.name, "grams": log.grams,
+    return {"id": log.id, "food_id": food.id, "name": food.display_name or food.name, "grams": log.grams,
             "meal_type": log.meal_type, "nutrition": nutrition(food, log.grams),
             "source_reference": food.source_reference, "is_verified": food.is_verified}
 
@@ -269,7 +386,7 @@ def update_log(log_id: int, payload: LogUpdate, db: Session = Depends(get_db)):
 @app.delete("/api/food-logs/{log_id}", status_code=204)
 def delete_log(log_id: int, db: Session = Depends(get_db)):
     log = db.get(FoodLog, log_id)
-    if not log:
+    if not log or log.visitor_id != visitor(db):
         raise HTTPException(404, "Không tìm thấy món trong nhật ký")
     db.delete(log)
     db.commit()
@@ -277,14 +394,14 @@ def delete_log(log_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/dashboard")
 def dashboard(day: date = Query(default_factory=local_today), db: Session = Depends(get_db)):
-    logs = db.scalars(select(FoodLog).options(selectinload(FoodLog.food))).all()
+    logs = db.scalars(select(FoodLog).where(FoodLog.visitor_id == visitor(db)).options(selectinload(FoodLog.food))).all()
     entries = []
     totals = {key: 0.0 for key in ("kcal", "protein", "carb", "fat")}
     for log in logs:
         if local_date(log.eaten_at) != day:
             continue
         values = nutrition(log.food, log.grams)
-        entries.append({"id": log.id, "food_id": log.food_id, "name": log.food.name,
+        entries.append({"id": log.id, "food_id": log.food_id, "name": log.food.display_name or log.food.name,
                         "grams": log.grams, "meal_type": log.meal_type, "nutrition": values,
                         "source_reference": log.food.source_reference, "is_verified": log.food.is_verified})
         for key, value in values.items():
@@ -303,9 +420,9 @@ WORKOUTS = [
 
 
 def workout_data(db, day):
-    selection = db.get(WorkoutSelection, 1)
+    selection = selection_record(db)
     plan = next((plan for plan in PLANS if selection and plan["id"] == selection.plan_id), None)
-    visits = db.scalars(select(WorkoutVisit).where(WorkoutVisit.plan_id == plan["id"])).all() if plan else []
+    visits = db.scalars(select(WorkoutVisit).where(WorkoutVisit.plan_id == scoped_key(db, plan["id"]))).all() if plan else []
     today_visit = next((visit for visit in visits if visit.day == day.isoformat()), None)
     completed_sessions = sum(visit.status == "completed" and visit.day <= day.isoformat() for visit in visits)
     session_index = (today_visit.session_index if today_visit else completed_sessions % len(plan["sessions"])) if plan else None
@@ -318,7 +435,7 @@ def workout_data(db, day):
             "attendance_history": [{"day": (day - timedelta(days=offset)).isoformat(),
                                     "status": next((v.status for v in visits if v.day == (day - timedelta(days=offset)).isoformat()), None)}
                                    for offset in range(6, -1, -1)] if plan else [],
-            "items": [{**workout, "status": progress[workout["id"]].status if workout["id"] in progress else "not_started"}
+            "items": [{**workout, "status": progress[scoped_key(db, workout["id"])].status if scoped_key(db, workout["id"]) in progress else "not_started"}
             for workout in items]}
 
 
@@ -335,7 +452,7 @@ class WorkoutSelectIn(BaseModel):
 def select_workout_plan(payload: WorkoutSelectIn, db: Session = Depends(get_db)):
     if payload.plan_id not in {plan["id"] for plan in PLANS}:
         raise HTTPException(404, "Không tìm thấy giáo án")
-    selection = db.get(WorkoutSelection, 1) or WorkoutSelection(id=1, plan_id=payload.plan_id)
+    selection = selection_record(db) or WorkoutSelection(visitor_id=visitor(db), plan_id=payload.plan_id)
     selection.plan_id = payload.plan_id
     db.add(selection)
     db.commit()
@@ -353,16 +470,16 @@ class AttendanceIn(BaseModel):
 
 @app.post("/api/workouts/attendance")
 def record_attendance(payload: AttendanceIn, db: Session = Depends(get_db)):
-    selection = db.get(WorkoutSelection, 1)
+    selection = selection_record(db)
     if not selection:
         raise HTTPException(409, "Hãy chọn giáo án trước")
     data = workout_data(db, local_today())
     today = local_today().isoformat()
-    visit = db.scalar(select(WorkoutVisit).where(WorkoutVisit.plan_id == selection.plan_id, WorkoutVisit.day == today))
+    visit = db.scalar(select(WorkoutVisit).where(WorkoutVisit.plan_id == scoped_key(db, selection.plan_id), WorkoutVisit.day == today))
     if visit and visit.status == "completed":
         raise HTTPException(409, "Buổi tập đã hoàn thành")
     if not visit:
-        visit = WorkoutVisit(plan_id=selection.plan_id, day=today,
+        visit = WorkoutVisit(plan_id=scoped_key(db, selection.plan_id), day=today,
                              session_index=data["session_number"] - 1, status=payload.status)
         db.add(visit)
     else:
@@ -381,10 +498,10 @@ def workout_action(workout_id: str, action: str, db: Session = Depends(get_db)):
     if data["selected_plan"] and data["attendance"] != "attended":
         raise HTTPException(409, "Hãy ghi nhận có đi tập hôm nay trước")
     today = local_today().isoformat()
-    progress = db.scalar(select(WorkoutProgress).where(WorkoutProgress.workout_id == workout_id,
+    progress = db.scalar(select(WorkoutProgress).where(WorkoutProgress.workout_id == scoped_key(db, workout_id),
                                                        WorkoutProgress.day == today))
     if not progress:
-        progress = WorkoutProgress(workout_id=workout_id, day=today)
+        progress = WorkoutProgress(workout_id=scoped_key(db, workout_id), day=today)
         db.add(progress)
     if action == "start" and progress.status != "completed":
         progress.status = "started"
@@ -397,9 +514,9 @@ def workout_action(workout_id: str, action: str, db: Session = Depends(get_db)):
         if data["selected_plan"]:
             statuses = {row.workout_id: row.status for row in db.scalars(
                 select(WorkoutProgress).where(WorkoutProgress.day == today))}
-            if all(statuses.get(item["id"]) == "completed" for item in data["items"]):
+            if all(statuses.get(scoped_key(db, item["id"])) == "completed" for item in data["items"]):
                 visit = db.scalar(select(WorkoutVisit).where(
-                    WorkoutVisit.plan_id == data["selected_plan"]["id"], WorkoutVisit.day == today))
+                    WorkoutVisit.plan_id == scoped_key(db, data["selected_plan"]["id"]), WorkoutVisit.day == today))
                 visit.status = "completed"
     db.commit()
     return workout_data(db, local_today())
@@ -415,7 +532,7 @@ def plan_data(plan):
     days = []
     for day in range(1, 8):
         items = [i for i in plan.items if i.day == day]
-        meals = [{"meal_slot": i.meal_slot, "food_id": i.food_id, "name": i.food.name,
+        meals = [{"meal_slot": i.meal_slot, "food_id": i.food_id, "name": i.food.display_name or i.food.name,
                   "grams": i.grams, "nutrition": nutrition(i.food, i.grams),
                   "source_reference": i.food.source_reference, "is_verified": i.food.is_verified}
                  for i in items]
@@ -427,7 +544,7 @@ def plan_data(plan):
 
 @app.post("/api/meal-plans/generate", status_code=201)
 def create_plan(payload: PlanIn, db: Session = Depends(get_db)):
-    records = db.scalars(select(Food)).all()
+    records = db.scalars(select(Food).where((Food.owner_id.is_(None)) | (Food.owner_id == visitor(db)))).all()
     allowed = [f for f in records if not (set(f.avoid_tags or []) & set(payload.avoid_tags))]
     if len(allowed) < 3:
         raise HTTPException(422, "Không đủ món phù hợp; cần tối thiểu ba món")
@@ -450,7 +567,7 @@ def create_plan(payload: PlanIn, db: Session = Depends(get_db)):
     db.add(AiRun(purpose="planner", prompt_version=ai.PLAN_PROMPT_VERSION,
                  model_id=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
                  latency_ms=round((perf_counter() - started) * 1000), status=run_status))
-    plan = MealPlan(week_start=payload.week_start.isoformat(), target_kcal=payload.target_kcal,
+    plan = MealPlan(week_start=payload.week_start.isoformat(), visitor_id=visitor(db), target_kcal=payload.target_kcal,
                     avoid_tags=payload.avoid_tags, generation_mode=mode, model_version=model)
     for day in checked:
         for meal in day["meals"]:
@@ -464,7 +581,7 @@ def create_plan(payload: PlanIn, db: Session = Depends(get_db)):
 
 @app.get("/api/meal-plans/{plan_id}")
 def get_plan(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.scalar(select(MealPlan).where(MealPlan.id == plan_id).options(selectinload(MealPlan.items).selectinload(MealPlanItem.food)))
+    plan = db.scalar(select(MealPlan).where(MealPlan.id == plan_id, MealPlan.visitor_id == visitor(db)).options(selectinload(MealPlan.items).selectinload(MealPlanItem.food)))
     if not plan:
         raise HTTPException(404, "Không tìm thấy thực đơn")
     return plan_data(plan)

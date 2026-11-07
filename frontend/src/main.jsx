@@ -1,15 +1,24 @@
 import React, {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Bell, CalendarDays, ChevronDown, CircleUserRound, Dumbbell, House, Menu, Settings2, UtensilsCrossed} from 'lucide-react';
+import {Bell, CalendarDays, ChevronDown, CircleUserRound, Dumbbell, House, Menu, UtensilsCrossed} from 'lucide-react';
 import ScanSection from './ScanSection.jsx';
 import TodayMeals from './TodayMeals.jsx';
 import WorkoutPanel from './WorkoutPanel.jsx';
 import WorkoutPlans from './WorkoutPlans.jsx';
+import ProfilePanel from './ProfilePanel.jsx';
 import './style.css';
 
 const API=import.meta.env.VITE_API_URL||'http://localhost:8000';
+function visitorId(){
+  const key='hbtnfit_visitor_id';
+  let value=localStorage.getItem(key);
+  if(!value){value=crypto.randomUUID();localStorage.setItem(key,value);}
+  return value;
+}
 async function call(path,options={}) {
-  const response=await fetch(`${API}${path}`,options);
+  const headers=new Headers(options.headers||{});
+  headers.set('X-Visitor-Id',visitorId());
+  const response=await fetch(`${API}${path}`,{...options,headers});
   const body=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(typeof body.detail==='string'?body.detail:`Lỗi ${response.status}`);
   return body;
@@ -21,22 +30,6 @@ const navigation=[
   {id:'food',label:'Ăn uống',icon:UtensilsCrossed},
   {id:'profile',label:'Cá nhân',icon:CircleUserRound},
 ];
-
-function ProfilePanel({profile,setProfile,call,onError}) {
-  const [busy,setBusy]=useState(false);
-  const [saved,setSaved]=useState(false);
-  const [avoid,setAvoid]=useState((profile.avoid_tags||[]).join(', '));
-  useEffect(()=>setAvoid((profile.avoid_tags||[]).join(', ')),[profile.avoid_tags]);
-  async function save() {
-    setBusy(true);setSaved(false);
-    try {
-      const body={...profile,age:profile.age===''?null:Number(profile.age),height_cm:profile.height_cm===''?null:Number(profile.height_cm),weight_kg:profile.weight_kg===''?null:Number(profile.weight_kg),target_kcal:Number(profile.target_kcal),avoid_tags:avoid.split(',').map(s=>s.trim()).filter(Boolean)};
-      const result=await call('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      setProfile(result);setSaved(true);
-    } catch(error){onError(error.message);} finally{setBusy(false);}
-  }
-  return <section className="panel profile-panel"><div className="panel-heading"><div><div className="section-kicker"><Settings2 size={15}/> THÔNG TIN CÁ NHÂN</div><h2>Hồ sơ của bạn</h2></div></div><p className="panel-lead">Dùng hồ sơ để lưu mục tiêu và thành phần muốn tránh. Bản demo hiện chỉ có một hồ sơ trên máy này.</p><div className="profile-grid"><label>Tuổi<input type="number" min="18" max="120" value={profile.age??''} onChange={e=>setProfile({...profile,age:e.target.value})} placeholder="Ví dụ 22"/></label><label>Chiều cao (cm)<input type="number" min="100" max="250" value={profile.height_cm??''} onChange={e=>setProfile({...profile,height_cm:e.target.value})} placeholder="Ví dụ 170"/></label><label>Cân nặng (kg)<input type="number" min="25" max="400" value={profile.weight_kg??''} onChange={e=>setProfile({...profile,weight_kg:e.target.value})} placeholder="Ví dụ 65"/></label><label>Mục tiêu<select value={profile.goal||'maintain'} onChange={e=>setProfile({...profile,goal:e.target.value})}><option value="maintain">Duy trì</option><option value="gain">Tăng cân</option><option value="lose">Giảm cân</option></select></label><label>Mục tiêu năng lượng tham khảo (kcal/ngày)<input type="number" min="900" max="5000" value={profile.target_kcal??1800} onChange={e=>setProfile({...profile,target_kcal:e.target.value})}/></label><label>Thành phần cần tránh<input value={avoid} onChange={e=>setAvoid(e.target.value)} placeholder="shrimp, pork"/></label></div><div className="profile-footer"><button className="primary-button" disabled={busy} onClick={save}>Lưu hồ sơ</button>{saved&&<span className="saved-message">Đã lưu thay đổi.</span>}</div><p className="data-note">Mục tiêu tự nhập chỉ để tham khảo, không thay thế tư vấn y khoa.</p></section>;
-}
 
 function App() {
   const [section,setSection]=useState('home');
@@ -67,7 +60,7 @@ function App() {
       <main className="content"><div className="page-intro"><div><div className="date-line"><CalendarDays size={15}/>{dateLabel}</div><h1>{title}</h1><p>{subtitle}</p></div><span className="demo-badge">PHIÊN BẢN ĐẦU TIÊN</span></div>{notice&&<div className="global-notice" role="alert">{notice}<button aria-label="Đóng thông báo" onClick={()=>setNotice('')}>×</button></div>}
         {(section==='home'||section==='food')&&<div className="dashboard-grid"><div className="main-column"><ScanSection call={call} foods={foods} onAdded={refresh}/></div><div className="side-column"><TodayMeals dashboard={dashboard} call={call} refresh={refresh} onError={setNotice}/></div></div>}
         {section==='workout'&&<div className="training-page">{workouts?.selected_plan&&<WorkoutPanel workouts={workouts} call={call} refresh={refresh} onError={setNotice}/>}<WorkoutPlans plans={plans} selectedId={workouts?.selected_plan?.id} call={call} refresh={refresh} onError={setNotice}/></div>}
-        {section==='profile'&&<div className="single-column"><ProfilePanel profile={profile} setProfile={setProfile} call={call} onError={setNotice}/></div>}
+        {section==='profile'&&<ProfilePanel profile={profile} setProfile={setProfile} call={call} onError={setNotice} refresh={refresh}/>}
         <footer className="app-footer">Thông tin dinh dưỡng và bài tập chỉ mang tính tham khảo. Dữ liệu món demo chưa được kiểm chứng.</footer>
       </main>
     </div>

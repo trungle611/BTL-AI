@@ -12,6 +12,8 @@ class Food(Base):
     __tablename__ = "foods"
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     name: Mapped[str] = mapped_column(String(160), unique=True)
+    display_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    owner_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     kcal_100g: Mapped[float] = mapped_column(Float)
     protein_100g: Mapped[float] = mapped_column(Float)
     carb_100g: Mapped[float] = mapped_column(Float)
@@ -36,7 +38,8 @@ class FoodAlias(Base):
 
 class Profile(Base):
     __tablename__ = "profiles"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visitor_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     age: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -45,10 +48,21 @@ class Profile(Base):
     target_kcal: Mapped[float] = mapped_column(Float, default=1800)
 
 
+class ProfileGuidance(Base):
+    __tablename__ = "profile_guidance"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visitor_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    target_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    food_choice: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    workout_choice: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+
 class FoodLog(Base):
     __tablename__ = "food_logs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     food_id: Mapped[str] = mapped_column(ForeignKey("foods.id"))
+    visitor_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     grams: Mapped[float] = mapped_column(Float)
     meal_type: Mapped[str] = mapped_column(String(30))
     eaten_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -60,6 +74,7 @@ class MealPlan(Base):
     __tablename__ = "meal_plans"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     week_start: Mapped[str] = mapped_column(String(10))
+    visitor_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     target_kcal: Mapped[float] = mapped_column(Float)
     avoid_tags: Mapped[list] = mapped_column(JSON, default=list)
     generation_mode: Mapped[str] = mapped_column(String(40))
@@ -104,7 +119,8 @@ class WorkoutProgress(Base):
 
 class WorkoutSelection(Base):
     __tablename__ = "workout_selection"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visitor_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     plan_id: Mapped[str] = mapped_column(String(40))
 
 

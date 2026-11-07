@@ -27,9 +27,15 @@ Phiên bản này ưu tiên hai luồng: **Ăn uống** và **Tập luyện**. C
 
 - Trình duyệt desktop: nhận diện ảnh hai món bằng Gemini, chỉnh khẩu phần, xác nhận, tổng ngày cập nhật; sửa món đã lưu và tổng tính lại; xem chi tiết bài tập, bắt đầu, hoàn thành.
 - Màn hình 390 px: thanh bên ẩn, nội dung thành một cột đúng thứ tự. Ở 1440 px: thanh trên 72 px, thanh bên 248 px, gap và padding 24 px; trang dài theo nội dung.
-- Backend: 14 kiểm thử pass, gồm món ngoài danh mục, lưu nhiều món, sửa/xóa, chọn giáo án, bỏ lỡ giữ nguyên buổi, hoàn thành chuyển buổi và chống thêm trùng. Frontend build pass.
+- Backend: 16 kiểm thử pass, gồm món ngoài danh mục, lưu nhiều món, sửa/xóa, chọn giáo án, bỏ lỡ giữ nguyên buổi, hoàn thành chuyển buổi, chống thêm trùng và tách dữ liệu giữa hai phiên test. Frontend build pass.
 - Trình duyệt: chọn PPL tăng cơ thấy buổi Push đầu tiên cùng bốn bài cụ thể, nút ghi nhận đi tập và lịch sử bảy ngày; món tự nhập 300 kcal được cộng vào tổng; bố cục giáo án ở 390 px không tràn ngang.
 
 ## Giới hạn dữ liệu demo
 
 Bốn món và số dinh dưỡng hiện là dữ liệu tổng hợp chưa kiểm chứng. Bài tập là template tham khảo. Ảnh thử được tạo bằng AI. Cần thay dữ liệu món bằng nguồn đã xác minh và chạy đánh giá trên ảnh thật trước khi dùng ngoài demo.
+
+## Bổ sung hồ sơ và hướng dẫn tập
+
+- Hồ sơ cho nhập cân nặng hiện tại, cân nặng mong muốn và thành phần cần tránh. Gemini tạo hai cách ăn có ví dụ bữa cụ thể và hai phương pháp tập tương ứng mục tiêu. Người dùng chọn phương án; lựa chọn giáo án đồng bộ sang trang Tập luyện.
+- Mỗi bài trong buổi tập có các bước thực hiện và thời gian nghỉ giữa hiệp. Nội dung chỉ là hướng dẫn tham khảo, không thay thế huấn luyện trực tiếp.
+- Dữ liệu demo tách theo mã phiên của từng trình duyệt, không phải đăng nhập. Không dùng thông tin sức khỏe thật khi test công khai.

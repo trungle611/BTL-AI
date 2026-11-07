@@ -17,7 +17,7 @@ def match_foods(labels, foods, limit=3):
         if not query:
             continue
         for food in foods:
-            names = [food.name] + [alias.alias for alias in food.aliases]
+            names = [getattr(food, "display_name", None) or food.name] + [alias.alias for alias in food.aliases]
             score = max((1.0 if normalize(name) == query else SequenceMatcher(None, query, normalize(name)).ratio()) for name in names)
             if score >= 0.74:
                 current = found.get(food.id)

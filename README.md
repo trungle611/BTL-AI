@@ -59,4 +59,4 @@ Sau khi có dự đoán thật, Bình lưu kết quả theo `data/scan_predictio
 
 Repo được tạo cục bộ ở `D:\BTLAI`. Trưởng nhóm tạo repository GitHub riêng, thêm remote rồi `git push -u origin main`. Chia các thẻ việc theo [hướng dẫn phân công](docs/HANDOFF_COREACH.md) trên CoReach AI; mỗi thẻ gắn nhánh, PR và reviewer. Các thành viên không sửa trực tiếp `main`.
 
-API hiện tập trung vào một hồ sơ demo, chưa có đăng nhập hoặc dữ liệu riêng theo người dùng. Không triển khai công khai khi chưa bổ sung xác thực, kiểm soát truy cập và migration. Xem [phân công và kế hoạch](docs/HANDOFF_COREACH.md).
+Mỗi trình duyệt hiện có một mã phiên test riêng cho hồ sơ, thực đơn và tập luyện, nhưng chưa có tài khoản đăng nhập hoặc xác thực thực sự. Chỉ dùng dữ liệu giả khi test công khai. Xem [hướng dẫn deploy Vercel](docs/DEPLOY_VERCEL.md) và [phân công, kế hoạch](docs/HANDOFF_COREACH.md).

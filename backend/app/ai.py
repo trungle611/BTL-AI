@@ -11,6 +11,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SCAN_PROMPT_VERSION = "scan-v2-multi-dish"
 PLAN_PROMPT_VERSION = "plan-v1"
+GUIDANCE_PROMPT_VERSION = "profile-guidance-v1"
 
 
 def client():
@@ -58,7 +59,7 @@ def generate_plan(foods, target_kcal):
     ai = client()
     if ai is None:
         raise RuntimeError("Chưa cấu hình GEMINI_API_KEY")
-    catalog = [{"food_id": f.id, "name": f.name, "kcal_100g": f.kcal_100g} for f in foods]
+    catalog = [{"food_id": f.id, "name": f.display_name or f.name, "kcal_100g": f.kcal_100g} for f in foods]
     prompt = ("Lập thực đơn đúng 7 ngày, mỗi ngày đúng 3 bữa breakfast, lunch, dinner. "
               "Chỉ dùng food_id trong danh mục. Chọn grams từ 1 đến 2000 để tổng năng lượng mỗi ngày "
               "nằm trong khoảng 80%-120% mục tiêu. Không tự đưa số macro. "
@@ -72,3 +73,31 @@ def generate_plan(foods, target_kcal):
         config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema),
     ))
     return json.loads(response.text)["days"]
+
+
+def generate_profile_guidance(profile, target_weight_kg, plan_names):
+    ai = client()
+    if ai is None:
+        raise RuntimeError("Chưa cấu hình GEMINI_API_KEY")
+    context = {"age": profile.age, "height_cm": profile.height_cm,
+               "current_weight_kg": profile.weight_kg, "target_weight_kg": target_weight_kg,
+               "avoid_ingredients": profile.avoid_tags or [], "available_workouts": plan_names}
+    prompt = ("Bạn là trợ lý sức khỏe cho người trưởng thành. Đọc dữ liệu hồ sơ dưới đây và trả lời tiếng Việt. "
+              "Đưa ra phân tích ngắn, hai cách ăn uống khác nhau với ví dụ món/bữa cụ thể, "
+              "và một nhận xét ngắn cho PPL, một cho Upper/Lower để người dùng tự chọn. "
+              "Ưu tiên ăn đủ chất và tập kháng lực phù hợp, không đề xuất ăn kiêng cực đoan, "
+              "không đưa kcal/ngày, tốc độ giảm/tăng cân hoặc chẩn đoán vì thiếu dữ liệu đánh giá. "
+              "Tôn trọng thành phần cần tránh. Nếu mục tiêu có vẻ không phù hợp, nói cần tham khảo chuyên gia. "
+              f"Hồ sơ: {json.dumps(context, ensure_ascii=False)}")
+    schema = {"type":"object","properties":{
+        "summary":{"type":"string"},
+        "food_options":{"type":"array","items":{"type":"object","properties":{
+            "title":{"type":"string"},"detail":{"type":"string"},
+            "examples":{"type":"array","items":{"type":"string"}}},
+            "required":["title","detail","examples"]}},
+        "ppl_note":{"type":"string"},"ul_note":{"type":"string"}},
+        "required":["summary","food_options","ppl_note","ul_note"]}
+    response = call_with_retry(lambda: ai.models.generate_content(
+        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"), contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema)))
+    return json.loads(response.text)

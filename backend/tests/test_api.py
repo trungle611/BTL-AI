@@ -160,6 +160,52 @@ def test_workout_plan_selection_and_progress(monkeypatch):
         assert following['session_number'] == 2
 
 
+def test_profile_weight_guidance_and_choice(monkeypatch):
+    monkeypatch.setattr('app.ai.generate_profile_guidance', lambda *_: {
+        'summary':'Mục tiêu tăng cân: ăn đa dạng và tập đều.',
+        'food_options':[{'title':'Bữa cân bằng','detail':'Ăn đủ các nhóm thực phẩm','examples':['Cơm, trứng, rau']},
+                        {'title':'Bữa chia nhỏ','detail':'Chia bữa theo lịch','examples':['Sữa chua, trái cây']}],
+        'ppl_note':'Phù hợp nếu có thời gian nhiều buổi.',
+        'ul_note':'Phù hợp nếu có ít buổi hơn.'})
+    with TestClient(app) as client:
+        saved = client.put('/api/profile', json={'age':22,'height_cm':170,'weight_kg':60,
+            'target_weight_kg':65,'goal':'gain','target_kcal':2000,'avoid_tags':[]})
+        assert saved.status_code == 200
+        assert saved.json()['target_weight_kg'] == 65
+        analyzed = client.post('/api/profile/analyze')
+        assert analyzed.status_code == 200
+        assert len(analyzed.json()['analysis']['food_options']) == 2
+        assert {item['id'] for item in analyzed.json()['analysis']['workout_options']} == {'gain_ppl','gain_ul'}
+        assert client.post('/api/profile/choice', json={'food_choice':'wrong'}).status_code == 422
+        chosen = client.post('/api/profile/choice', json={'food_choice':'food_1','workout_choice':'gain_ul'})
+        assert chosen.status_code == 200
+        assert chosen.json()['food_choice'] == 'food_1'
+        assert client.get('/api/workouts/today').json()['selected_plan']['id'] == 'gain_ul'
+        changed = client.put('/api/profile', json={'age':22,'height_cm':170,'weight_kg':60,
+            'target_weight_kg':66,'goal':'gain','target_kcal':2000,'avoid_tags':[]})
+        assert changed.json()['analysis'] is None
+
+
+def test_browser_demo_sessions_do_not_share_data():
+    first = {'X-Visitor-Id':'11111111-1111-4111-8111-111111111111'}
+    second = {'X-Visitor-Id':'22222222-2222-4222-8222-222222222222'}
+    with TestClient(app) as client:
+        assert client.put('/api/profile', headers=first, json={'weight_kg':62,'target_weight_kg':66}).status_code == 200
+        assert client.get('/api/profile', headers=second).json()['weight_kg'] is None
+        food = {'custom_food':{'name':'Món riêng của phiên đầu','kcal_100g':100},
+                'grams':100,'meal_type':'lunch','confirmed':True}
+        own_log = client.post('/api/food-logs/batch', headers=first, json={'items':[food]})
+        assert own_log.status_code == 201
+        own_entry = own_log.json()['entries'][0]
+        assert client.get('/api/dashboard', headers=first).json()['totals']['kcal'] == 100
+        assert client.get('/api/dashboard', headers=second).json()['totals']['kcal'] == 0
+        assert client.get('/api/foods', headers=second, params={'q':'Món riêng'}).json() == []
+        assert client.get(f"/api/foods/{own_entry['food_id']}", headers=second).status_code == 404
+        assert client.delete(f"/api/food-logs/{own_entry['id']}", headers=second).status_code == 404
+        assert client.post('/api/workouts/select', headers=first, json={'plan_id':'gain_ppl'}).status_code == 200
+        assert client.get('/api/workouts/today', headers=second).json()['selected_plan'] is None
+
+
 def test_profile_and_plan_fallback(monkeypatch):
     def ai_unavailable(*args, **kwargs):
         raise RuntimeError('AI unavailable in unit test')
