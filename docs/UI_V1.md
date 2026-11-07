@@ -27,7 +27,7 @@ Phiên bản này ưu tiên hai luồng: **Ăn uống** và **Tập luyện**. C
 
 - Trình duyệt desktop: nhận diện ảnh hai món bằng Gemini, chỉnh khẩu phần, xác nhận, tổng ngày cập nhật; sửa món đã lưu và tổng tính lại; xem chi tiết bài tập, bắt đầu, hoàn thành.
 - Màn hình 390 px: thanh bên ẩn, nội dung thành một cột đúng thứ tự. Ở 1440 px: thanh trên 72 px, thanh bên 248 px, gap và padding 24 px; trang dài theo nội dung.
-- Backend: 16 kiểm thử pass, gồm món ngoài danh mục, lưu nhiều món, sửa/xóa, chọn giáo án, bỏ lỡ giữ nguyên buổi, hoàn thành chuyển buổi, chống thêm trùng và tách dữ liệu giữa hai phiên test. Frontend build pass.
+- Backend: 17 kiểm thử pass, gồm món ngoài danh mục, lưu nhiều món, sửa/xóa, chọn giáo án, bỏ lỡ giữ nguyên buổi, hoàn thành chuyển buổi, chống thêm trùng và tách dữ liệu giữa hai phiên test. Frontend build pass.
 - Trình duyệt: chọn PPL tăng cơ thấy buổi Push đầu tiên cùng bốn bài cụ thể, nút ghi nhận đi tập và lịch sử bảy ngày; món tự nhập 300 kcal được cộng vào tổng; bố cục giáo án ở 390 px không tràn ngang.
 
 ## Giới hạn dữ liệu demo

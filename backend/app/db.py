@@ -1,5 +1,7 @@
 import os
 import uuid
+from pathlib import Path
+from dotenv import load_dotenv
 from fastapi import HTTPException, Request
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.pool import NullPool
@@ -10,6 +12,7 @@ class Base(DeclarativeBase):
     pass
 
 
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL") or "sqlite:///./hbtnfit.db"
 if os.getenv("VERCEL") and DATABASE_URL.startswith("sqlite"):
     raise RuntimeError("Vercel cần DATABASE_URL hoặc POSTGRES_URL dùng PostgreSQL")

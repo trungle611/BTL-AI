@@ -206,6 +206,14 @@ def test_browser_demo_sessions_do_not_share_data():
         assert client.get('/api/workouts/today', headers=second).json()['selected_plan'] is None
 
 
+def test_public_demo_requires_visitor_id(monkeypatch):
+    monkeypatch.setenv('REQUIRE_VISITOR_ID', '1')
+    with TestClient(app) as client:
+        assert client.get('/api/profile').status_code == 400
+        assert client.get('/api/profile', headers={'X-Visitor-Id':'not-a-uuid'}).status_code == 400
+        assert client.get('/api/profile', headers={'X-Visitor-Id':'33333333-3333-4333-8333-333333333333'}).status_code == 200
+
+
 def test_profile_and_plan_fallback(monkeypatch):
     def ai_unavailable(*args, **kwargs):
         raise RuntimeError('AI unavailable in unit test')
