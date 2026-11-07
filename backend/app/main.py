@@ -22,7 +22,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="HBTNFIT API", version="0.1.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"], allow_methods=["*"], allow_headers=["*"])
 
 
 def food_data(food):
@@ -76,7 +76,7 @@ def foods(q: str = "", db: Session = Depends(get_db)):
     if q:
         query = normalize(q)
         records = [f for f in records if any(query in normalize(n) for n in [f.name] + [a.alias for a in f.aliases])]
-    return [food_data(f) for f in records[:50]]
+    return [food_data(f) for f in records[:200]]
 
 
 @app.get("/api/foods/{food_id}")
@@ -116,13 +116,18 @@ async def scan(file: UploadFile = File(...), db: Session = Depends(get_db)):
                      latency_ms=round((perf_counter() - started) * 1000), status=status))
         db.commit()
     records = db.scalars(select(Food).options(selectinload(Food.aliases))).all()
-    candidates = match_foods(result.get("candidate_labels", [])[:3], records)
-    return {"request_id": request_id, "status": "needs_confirmation" if candidates else "unknown",
-            "candidates": [food_data(f) for f in candidates],
-            "portion_hint": result.get("portion_hint", "unknown"),
-            "visible_ingredients": result.get("visible_ingredients", []),
-            "warnings": ["Khẩu phần ảnh chỉ là gợi ý; hãy xác nhận số gam."] +
-                        ([result.get("uncertainty_reason")] if result.get("uncertainty_reason") else []),
+    dishes = []
+    for item in result.get("dishes", [])[:5]:
+        labels = [label for label in item.get("candidate_labels", [])[:3] if isinstance(label, str)]
+        candidates = match_foods(labels, records)
+        dishes.append({"suggested_labels": labels, "candidates": [food_data(f) for f in candidates],
+                       "visible_ingredients": item.get("visible_ingredients", []),
+                       "uncertainty_reason": item.get("uncertainty_reason", "")})
+    if not dishes:
+        dishes = [{"suggested_labels": [], "candidates": [], "visible_ingredients": [],
+                   "uncertainty_reason": result.get("warning") or "Không nhận diện được món ăn"}]
+    return {"request_id": request_id, "status": "needs_confirmation" if any(d["candidates"] for d in dishes) else "unknown",
+            "dishes": dishes, "warnings": [result["warning"]] if result.get("warning") else [],
             "prompt_version": ai.SCAN_PROMPT_VERSION}
 
 
@@ -132,6 +137,33 @@ class LogIn(BaseModel):
     meal_type: str = Field(pattern="^(breakfast|lunch|dinner|snack)$")
     eaten_at: datetime | None = None
     confirmed: bool
+
+
+class BatchLogIn(BaseModel):
+    items: list[LogIn] = Field(min_length=1, max_length=5)
+
+
+@app.post("/api/food-logs/batch", status_code=201)
+def add_logs_batch(payload: BatchLogIn, db: Session = Depends(get_db)):
+    records = []
+    for item in payload.items:
+        if not item.confirmed:
+            raise HTTPException(422, "Cần xác nhận từng món và khẩu phần trước khi lưu")
+        food = db.get(Food, item.food_id)
+        if not food:
+            raise HTTPException(404, f"Food ID không tồn tại: {item.food_id}")
+        records.append((item, food))
+    created = []
+    for item, food in records:
+        log = FoodLog(food_id=food.id, grams=item.grams, meal_type=item.meal_type,
+                      eaten_at=item.eaten_at or datetime.now(timezone.utc))
+        db.add(log)
+        created.append((log, food))
+    db.commit()
+    return {"entries": [{"id": log.id, "food_id": food.id, "name": food.name,
+                         "grams": log.grams, "nutrition": nutrition(food, log.grams),
+                         "source_reference": food.source_reference, "is_verified": food.is_verified}
+                        for log, food in created]}
 
 
 @app.post("/api/food-logs", status_code=201)

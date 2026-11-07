@@ -13,7 +13,7 @@ Tài liệu gốc là **bản đề xuất**, không phải bằng chứng đã 
 
 | Thành viên | Issue đầu tiên | Phạm vi chính | Đầu ra và tiêu chí hoàn thành | Reviewer |
 |---|---|---|---|---|
-| Lê Đình Trung | AI-01 | `backend/app/ai.py`, `core.py` | Cấu hình Gemini thật, đo thử ảnh; sửa prompt/schema; hậu kiểm planner; test ID lạ, JSON lỗi, timeout. Scan ảnh thật trả top-3/unknown và không sinh macro. | Bình |
+| Lê Đình Trung | AI-01 | `backend/app/ai.py`, `core.py` | Đánh giá Gemini trên ảnh một và nhiều món; chỉnh prompt/schema; hậu kiểm planner; test ID lạ, JSON lỗi, timeout. Scan trả từng món với top-3/unknown và không sinh macro. | Bình |
 | Nguyễn Minh Hoàng | BE-01 | `backend/app/models.py`, `main.py`, import dữ liệu | Migration, hồ sơ người dùng, API logs/dashboard, giới hạn upload, CSDL món 60 món đầu có nguồn; unit/integration tests. Mỗi kết quả có nguồn và đơn vị. | Trung |
 | Nguyễn Danh Nhân | FE-01 | `frontend/` và UX | Xác nhận top-3, nhập gam, nhập tay khi AI lỗi, dashboard, planner, trạng thái lỗi/loading và responsive; ghi hình demo luồng đầy đủ. | Hoàng |
 | Nguyễn Xuân Bình | QA-01 | `backend/tests/`, `data/` và benchmark | Protocol gán nhãn, bộ ảnh dev/test tách bữa gần trùng, script Top-1/Top-3/unknown/latency, baseline A/C, bảng lỗi, AI Usage Log. Không dùng test cuối để chỉnh prompt. | Nhân |

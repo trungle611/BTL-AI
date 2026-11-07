@@ -1,6 +1,6 @@
 # HBTNFIT Track 1
 
-Bản khởi tạo ứng dụng nhận diện món Việt, ghi nhật ký dinh dưỡng và lập thực đơn 7 ngày theo tài liệu đề xuất của nhóm. Đây là mã nguồn chạy thử, chưa có bộ dữ liệu dinh dưỡng đã kiểm chứng, bộ ảnh đánh giá, khóa Gemini hay kết quả thực nghiệm thật.
+Bản khởi tạo ứng dụng nhận diện món Việt, ghi nhật ký dinh dưỡng và lập thực đơn 7 ngày theo tài liệu đề xuất của nhóm. Luồng quét ảnh đã được mở rộng theo yêu cầu mới: Gemini gợi ý tối đa 5 món trong một ảnh, người dùng xác nhận từng món; chỉ mở nhập tay khi gợi ý sai hoặc món bị bỏ sót. Đây là mã nguồn chạy thử, chưa có bộ dữ liệu dinh dưỡng đã kiểm chứng, bộ ảnh đánh giá hay kết quả thực nghiệm thật.
 
 ## Chạy trên máy
 
@@ -29,7 +29,7 @@ Mở `http://localhost:5173`. API docs ở `http://localhost:8000/docs`.
 
 ## Xem demo
 
-Sau khi chạy hai terminal trên, mở `http://localhost:5173`, chọn **Thử ảnh phở mẫu** để xem AI nhận diện ảnh tổng hợp. Chọn món, nhập số gam và bấm **Xác nhận và lưu nhật ký**. Ở tab **Thực đơn 7 ngày**, nhập mục tiêu thử nghiệm và bấm **Tạo thực đơn**; giao diện cho biết kết quả đến từ Gemini hay bộ quy tắc dự phòng. Ảnh mẫu nằm tại `demo/pho_bo_synthetic.png` và được tạo bằng AI, chỉ để thử phần mềm, không dùng làm mẫu đánh giá độ chính xác.
+Sau khi chạy hai terminal trên, mở `http://localhost:5173` và chọn ảnh; ứng dụng tự gửi ảnh cho Gemini. Có thể chọn **Thử ảnh một món** hoặc **Thử ảnh hai món**. Giao diện hiển thị gợi ý riêng cho từng món; phải chọn món và nhập số gam rồi mới bật nút lưu. Nếu gợi ý sai, bấm **Không đúng món nào? Nhập tay** để tìm trong danh mục; có thể thêm món Gemini bỏ sót. Các ảnh mẫu trong `demo/` được tạo bằng AI, chỉ để thử phần mềm, không dùng làm mẫu đánh giá độ chính xác. Ở tab **Thực đơn 7 ngày**, nhập mục tiêu thử nghiệm và bấm **Tạo thực đơn**; giao diện cho biết kết quả đến từ Gemini hay bộ quy tắc dự phòng.
 
 ## Dữ liệu
 

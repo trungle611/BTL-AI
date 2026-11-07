@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-SCAN_PROMPT_VERSION = "scan-v1"
+SCAN_PROMPT_VERSION = "scan-v2-multi-dish"
 PLAN_PROMPT_VERSION = "plan-v1"
 
 
@@ -32,16 +32,20 @@ def scan_image(image_bytes: bytes, mime_type: str):
     ai = client()
     if ai is None:
         raise RuntimeError("Chưa cấu hình GEMINI_API_KEY")
-    prompt = ("Nhận diện đúng một món Việt chính trong ảnh. Trả tối đa ba tên món có thể có theo thứ tự. "
-              "Nếu ảnh không rõ, không phải thức ăn hoặc nhiều món, hãy nêu lý do và đặt needs_confirmation=true. "
-              "Không trả năng lượng hoặc chất dinh dưỡng. Mọi tên chỉ là gợi ý, không tự tạo food_id.")
-    schema = {"type": "object", "properties": {
+    prompt = ("Hãy nhận diện từng món ăn riêng biệt nhìn thấy trong ảnh, tối đa 5 món. "
+              "Với mỗi món, trả tối đa 3 tên món có thể là gì theo thứ tự khả năng; không gộp các món khác nhau. "
+              "Nếu ảnh mờ hoặc không phải đồ ăn thì trả dishes là mảng rỗng và nêu cảnh báo. "
+              "Không tự đoán số gam, năng lượng hay macro. Không tạo food_id. "
+              "Mọi kết quả đều cần người dùng xác nhận trước khi lưu.")
+    dish_schema = {"type": "object", "properties": {
         "candidate_labels": {"type": "array", "items": {"type": "string"}},
         "visible_ingredients": {"type": "array", "items": {"type": "string"}},
-        "portion_hint": {"type": "string"},
-        "uncertainty_reason": {"type": "string"},
-        "needs_confirmation": {"type": "boolean"}},
-        "required": ["candidate_labels", "visible_ingredients", "portion_hint", "uncertainty_reason", "needs_confirmation"]}
+        "uncertainty_reason": {"type": "string"}},
+        "required": ["candidate_labels", "visible_ingredients", "uncertainty_reason"]}
+    schema = {"type": "object", "properties": {
+        "dishes": {"type": "array", "items": dish_schema},
+        "warning": {"type": "string"}},
+        "required": ["dishes", "warning"]}
     response = call_with_retry(lambda: ai.models.generate_content(
         model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), prompt],
