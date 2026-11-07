@@ -89,3 +89,22 @@ class AiRun(Base):
     latency_ms: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(30))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class WorkoutProgress(Base):
+    __tablename__ = "workout_progress"
+    __table_args__ = (UniqueConstraint("workout_id", "day"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workout_id: Mapped[str] = mapped_column(String(40))
+    day: Mapped[str] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(20), default="not_started")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BatchSubmission(Base):
+    __tablename__ = "batch_submissions"
+    confirmation_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    log_ids: Mapped[list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

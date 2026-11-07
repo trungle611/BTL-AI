@@ -1,60 +1,75 @@
-import React, { useEffect, useState } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, {useEffect, useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {Bell, CalendarDays, ChevronDown, CircleUserRound, Dumbbell, House, Menu, Settings2, UtensilsCrossed} from 'lucide-react';
 import ScanSection from './ScanSection.jsx';
+import TodayMeals from './TodayMeals.jsx';
+import WorkoutPanel from './WorkoutPanel.jsx';
 import './style.css';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-async function call(path, options = {}) {
-  const response = await fetch(`${API}${path}`, options);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : `Lỗi ${response.status}`);
+const API=import.meta.env.VITE_API_URL||'http://localhost:8000';
+async function call(path,options={}) {
+  const response=await fetch(`${API}${path}`,options);
+  const body=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(typeof body.detail==='string'?body.detail:`Lỗi ${response.status}`);
   return body;
 }
-const fmt = x => Number(x || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 });
+
+const navigation=[
+  {id:'home',label:'Trang chủ',icon:House},
+  {id:'workout',label:'Tập luyện',icon:Dumbbell},
+  {id:'food',label:'Ăn uống',icon:UtensilsCrossed},
+  {id:'profile',label:'Cá nhân',icon:CircleUserRound},
+];
+
+function ProfilePanel({profile,setProfile,call,onError}) {
+  const [busy,setBusy]=useState(false);
+  const [saved,setSaved]=useState(false);
+  const [avoid,setAvoid]=useState((profile.avoid_tags||[]).join(', '));
+  useEffect(()=>setAvoid((profile.avoid_tags||[]).join(', ')),[profile.avoid_tags]);
+  async function save() {
+    setBusy(true);setSaved(false);
+    try {
+      const body={...profile,age:profile.age===''?null:Number(profile.age),height_cm:profile.height_cm===''?null:Number(profile.height_cm),weight_kg:profile.weight_kg===''?null:Number(profile.weight_kg),target_kcal:Number(profile.target_kcal),avoid_tags:avoid.split(',').map(s=>s.trim()).filter(Boolean)};
+      const result=await call('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      setProfile(result);setSaved(true);
+    } catch(error){onError(error.message);} finally{setBusy(false);}
+  }
+  return <section className="panel profile-panel"><div className="panel-heading"><div><div className="section-kicker"><Settings2 size={15}/> THÔNG TIN CÁ NHÂN</div><h2>Hồ sơ của bạn</h2></div></div><p className="panel-lead">Dùng hồ sơ để lưu mục tiêu và thành phần muốn tránh. Bản demo hiện chỉ có một hồ sơ trên máy này.</p><div className="profile-grid"><label>Tuổi<input type="number" min="18" max="120" value={profile.age??''} onChange={e=>setProfile({...profile,age:e.target.value})} placeholder="Ví dụ 22"/></label><label>Chiều cao (cm)<input type="number" min="100" max="250" value={profile.height_cm??''} onChange={e=>setProfile({...profile,height_cm:e.target.value})} placeholder="Ví dụ 170"/></label><label>Cân nặng (kg)<input type="number" min="25" max="400" value={profile.weight_kg??''} onChange={e=>setProfile({...profile,weight_kg:e.target.value})} placeholder="Ví dụ 65"/></label><label>Mục tiêu<select value={profile.goal||'maintain'} onChange={e=>setProfile({...profile,goal:e.target.value})}><option value="maintain">Duy trì</option><option value="gain">Tăng cân</option><option value="lose">Giảm cân</option></select></label><label>Mục tiêu năng lượng tham khảo (kcal/ngày)<input type="number" min="900" max="5000" value={profile.target_kcal??1800} onChange={e=>setProfile({...profile,target_kcal:e.target.value})}/></label><label>Thành phần cần tránh<input value={avoid} onChange={e=>setAvoid(e.target.value)} placeholder="shrimp, pork"/></label></div><div className="profile-footer"><button className="primary-button" disabled={busy} onClick={save}>Lưu hồ sơ</button>{saved&&<span className="saved-message">Đã lưu thay đổi.</span>}</div><p className="data-note">Mục tiêu tự nhập chỉ để tham khảo, không thay thế tư vấn y khoa.</p></section>;
+}
 
 function App() {
-  const [tab, setTab] = useState('scan');
-  const [foods, setFoods] = useState([]);
-  const [dashboard, setDashboard] = useState(null);
-  const [plan, setPlan] = useState(null);
-  const [target, setTarget] = useState(1800);
-  const [avoid, setAvoid] = useState('');
-  const [profile, setProfile] = useState({age:'',height_cm:'',weight_kg:'',goal:'maintain',target_kcal:1800,avoid_tags:[]});
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [section,setSection]=useState('home');
+  const [foods,setFoods]=useState([]);
+  const [dashboard,setDashboard]=useState(null);
+  const [workouts,setWorkouts]=useState(null);
+  const [profile,setProfile]=useState({age:null,height_cm:null,weight_kg:null,goal:'maintain',avoid_tags:[],target_kcal:1800});
+  const [notice,setNotice]=useState('');
+  const [showBell,setShowBell]=useState(false);
+  const [navOpen,setNavOpen]=useState(false);
 
-  const refresh = async () => {
-    const [list, dash, currentProfile] = await Promise.all([call('/api/foods'), call('/api/dashboard'), call('/api/profile')]);
-    setFoods(list); setDashboard(dash); setProfile(currentProfile); setTarget(currentProfile.target_kcal); setAvoid(currentProfile.avoid_tags.join(', '));
-  };
-  useEffect(() => { refresh().catch(e => setMessage(e.message)); }, []);
-
-  async function run(fn) {
-    setBusy(true); setMessage('');
-    try { await fn(); } catch (e) { setMessage(e.message); } finally { setBusy(false); }
+  async function refresh() {
+    const [catalog,day,training]=await Promise.all([call('/api/foods'),call('/api/dashboard'),call('/api/workouts/today')]);
+    setFoods(catalog);setDashboard(day);setWorkouts(training);
   }
-  const generate = () => run(async () => {
-    const monday = new Date(); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    const weekStart = `${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
-    const result = await call('/api/meal-plans/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({week_start:weekStart,target_kcal:Number(target),avoid_tags:avoid.split(',').map(s=>s.trim()).filter(Boolean)})});
-    setPlan(result);
-  });
-  const saveProfile = () => run(async () => {
-    const body = {...profile, age:profile.age === '' ? null : Number(profile.age), height_cm:profile.height_cm === '' ? null : Number(profile.height_cm), weight_kg:profile.weight_kg === '' ? null : Number(profile.weight_kg), target_kcal:Number(profile.target_kcal), avoid_tags:avoid.split(',').map(s=>s.trim()).filter(Boolean)};
-    const result = await call('/api/profile', {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    setProfile(result); setTarget(result.target_kcal); setMessage('Đã lưu hồ sơ thử nghiệm.');
-  });
+  useEffect(()=>{
+    Promise.all([refresh(),call('/api/profile').then(setProfile)]).catch(error=>setNotice(error.message));
+  },[]);
+  function go(id){setSection(id);setNavOpen(false);setNotice('');}
+  const dateLabel=new Intl.DateTimeFormat('vi-VN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date());
+  const title={home:'Tổng quan hôm nay',food:'Ăn uống',workout:'Tập luyện',profile:'Cá nhân'}[section];
+  const subtitle={home:'Theo dõi bữa ăn và kế hoạch tập luyện của bạn trong một nơi.',food:'Nhận diện món ăn, xác nhận khẩu phần và theo dõi thực đơn.',workout:'Xem kế hoạch hôm nay và đánh dấu tiến độ từng bài tập.',profile:'Cập nhật thông tin và mục tiêu cá nhân.'}[section];
 
-  return <main>
-    <header><div><p className="eyebrow">TRỢ LÝ DINH DƯỠNG MÓN VIỆT</p><h1>HBTNFIT</h1><p>Nhận diện món ăn, xác nhận khẩu phần và lập thực đơn có kiểm tra.</p></div><div className="badge">Bản thử nghiệm Track 1</div></header>
-    <nav>{[['scan','Quét và ghi bữa'],['dashboard','Nhật ký'],['plan','Thực đơn 7 ngày'],['profile','Hồ sơ']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav>
-    {message && <div className="notice" role="status">{message}</div>}
-    {tab==='scan' && <ScanSection call={call} foods={foods} refresh={refresh} setTab={setTab} setMessage={setMessage}/>}
-    {tab==='dashboard' && <section className="card"><h2>Nhật ký hôm nay</h2><div className="metric">{fmt(dashboard?.totals.kcal)} <span>kcal</span></div><p>Đạm {fmt(dashboard?.totals.protein)} g · Bột đường {fmt(dashboard?.totals.carb)} g · Béo {fmt(dashboard?.totals.fat)} g</p>{dashboard?.entries.length ? dashboard.entries.map(x=><div className="entry" key={x.id}><strong>{x.name}</strong><span>{fmt(x.grams)} g · {fmt(x.nutrition.kcal)} kcal</span><small>{x.source_reference}</small></div>) : <p>Chưa có bữa ăn nào được ghi.</p>}</section>}
-    {tab==='plan' && <section className="grid"><div className="card"><h2>Lập thực đơn tuần</h2><p>Chỉ dùng món trong danh mục. Hệ thống kiểm tra ID, thành phần cần tránh và tổng năng lượng.</p><label>Mục tiêu tham khảo (kcal/ngày)<input type="number" min="900" max="5000" value={target} onChange={e=>setTarget(e.target.value)}/></label><label>Thành phần cần tránh (tag, cách nhau bằng dấu phẩy)<input value={avoid} onChange={e=>setAvoid(e.target.value)} placeholder="shrimp, pork"/></label><button disabled={busy} onClick={generate}>Tạo thực đơn</button><p className="muted">Mục tiêu tự nhập chỉ phục vụ bản thử nghiệm; đây không phải chỉ định y khoa.</p></div><div className="card"><h2>Kết quả</h2>{plan ? <><p>Chế độ: {plan.generation_mode === 'gemini' ? 'Gemini + hậu kiểm' : 'Dự phòng theo quy tắc'}</p>{plan.days.map(day=><div className="day" key={day.day}><strong>Ngày {day.day} · {fmt(day.total_kcal)} kcal</strong>{day.meals.map(m=><p key={m.meal_slot}>{m.meal_slot}: {m.name}, {fmt(m.grams)} g</p>)}</div>)}<p className="warn">Kiểm tra nguồn dữ liệu từng món trước khi dùng ngoài bản demo.</p></> : <p>Chưa có thực đơn.</p>}</div></section>}
-    {tab==='profile' && <section className="card"><h2>Hồ sơ thử nghiệm</h2><p>Thông tin lưu trên máy chạy backend. Chưa có tài khoản riêng cho nhiều người dùng.</p><div className="row"><label>Tuổi (từ 18)<input type="number" value={profile.age ?? ''} onChange={e=>setProfile({...profile,age:e.target.value})}/></label><label>Chiều cao (cm)<input type="number" value={profile.height_cm ?? ''} onChange={e=>setProfile({...profile,height_cm:e.target.value})}/></label></div><div className="row"><label>Cân nặng (kg)<input type="number" value={profile.weight_kg ?? ''} onChange={e=>setProfile({...profile,weight_kg:e.target.value})}/></label><label>Mục tiêu<select value={profile.goal} onChange={e=>setProfile({...profile,goal:e.target.value})}><option value="maintain">Duy trì</option><option value="gain">Tăng cân</option><option value="lose">Giảm cân</option></select></label></div><label>Mục tiêu năng lượng tự đặt (kcal/ngày)<input type="number" value={profile.target_kcal} onChange={e=>setProfile({...profile,target_kcal:e.target.value})}/></label><label>Thành phần cần tránh (tag, cách nhau bằng dấu phẩy)<input value={avoid} onChange={e=>setAvoid(e.target.value)}/></label><button disabled={busy} onClick={saveProfile}>Lưu hồ sơ</button><p className="muted">Ứng dụng không tự tính mục tiêu y khoa từ tuổi, chiều cao và cân nặng.</p></section>}
-    <footer>Chỉ mang tính tham khảo. Dữ liệu demo được đánh dấu riêng; không dùng cho quyết định sức khỏe.</footer>
-  </main>;
+  return <div className="app-shell">
+    <header className="topbar"><div className="topbar-inner"><button className="menu-toggle" aria-label="Mở điều hướng" onClick={()=>setNavOpen(!navOpen)}><Menu size={22}/></button><button className="brand" onClick={()=>go('home')} aria-label="Về trang chủ HBTNFIT"><span className="brand-mark">H<span>+</span></span><span className="brand-name">HBTNFIT</span></button><span className="topbar-caption">Sống khỏe theo cách của bạn</span><div className="top-actions"><div className="notification-wrap"><button className="header-icon" aria-label="Thông báo" aria-expanded={showBell} onClick={()=>setShowBell(!showBell)}><Bell size={19}/></button>{showBell&&<div className="notification-popover">Chưa có thông báo mới.</div>}</div><button className="account-button" onClick={()=>go('profile')}><span className="avatar">U</span><span>Tài khoản demo</span><ChevronDown size={15}/></button></div></div></header>
+    <div className="body-layout"><aside className={`sidebar ${navOpen?'open':''}`}><div className="sidebar-group"><span className="sidebar-label">ĐIỀU HƯỚNG</span><nav aria-label="Điều hướng chính">{navigation.map(item=>{const Icon=item.icon;return <button key={item.id} className={`nav-item ${section===item.id?'active':''}`} onClick={()=>go(item.id)} title={item.label}><Icon size={19}/><span>{item.label}</span></button>;})}</nav></div><div className="sidebar-bottom"><div className="sidebar-note"><span className="status-dot"/> Bản dùng thử Track 1</div><small>HBTNFIT · 2026</small></div></aside>
+      <main className="content"><div className="page-intro"><div><div className="date-line"><CalendarDays size={15}/>{dateLabel}</div><h1>{title}</h1><p>{subtitle}</p></div><span className="demo-badge">PHIÊN BẢN ĐẦU TIÊN</span></div>{notice&&<div className="global-notice" role="alert">{notice}<button aria-label="Đóng thông báo" onClick={()=>setNotice('')}>×</button></div>}
+        {(section==='home'||section==='food')&&<div className="dashboard-grid"><div className="main-column"><ScanSection call={call} foods={foods} onAdded={refresh}/></div><div className="side-column"><TodayMeals dashboard={dashboard} call={call} refresh={refresh} onError={setNotice}/><WorkoutPanel workouts={workouts} call={call} refresh={refresh} onError={setNotice} compact/></div></div>}
+        {section==='workout'&&<div className="single-column"><WorkoutPanel workouts={workouts} call={call} refresh={refresh} onError={setNotice}/></div>}
+        {section==='profile'&&<div className="single-column"><ProfilePanel profile={profile} setProfile={setProfile} call={call} onError={setNotice}/></div>}
+        <footer className="app-footer">Thông tin dinh dưỡng và bài tập chỉ mang tính tham khảo. Dữ liệu món demo chưa được kiểm chứng.</footer>
+      </main>
+    </div>
+  </div>;
 }
 
 createRoot(document.getElementById('root')).render(<App/>);

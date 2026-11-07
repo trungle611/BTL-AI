@@ -68,6 +68,42 @@ def test_batch_logs_are_all_or_nothing():
         assert len(response.json()['entries']) == 2
 
 
+def test_log_can_be_edited_and_deleted():
+    with TestClient(app) as client:
+        created = client.post('/api/food-logs', json={'food_id':'T1','grams':100,'meal_type':'lunch','confirmed':True}).json()
+        changed = client.patch(f"/api/food-logs/{created['id']}", json={'grams':200,'meal_type':'dinner'})
+        assert changed.status_code == 200
+        assert changed.json()['nutrition']['kcal'] == 500
+        assert changed.json()['meal_type'] == 'dinner'
+        assert client.delete(f"/api/food-logs/{created['id']}").status_code == 204
+        assert client.patch(f"/api/food-logs/{created['id']}", json={'grams':100,'meal_type':'lunch'}).status_code == 404
+
+
+def test_workout_progress_is_separate_from_food_logs():
+    with TestClient(app) as client:
+        before = client.get('/api/dashboard').json()['totals']
+        today = client.get('/api/workouts/today').json()
+        assert len(today['items']) == 3
+        assert client.post('/api/workouts/squat/start').json()['items'][1]['status'] == 'started'
+        assert client.post('/api/workouts/squat/complete').json()['items'][1]['status'] == 'completed'
+        assert client.get('/api/workouts/today').json()['items'][1]['status'] == 'completed'
+        assert client.get('/api/dashboard').json()['totals'] == before
+
+
+def test_repeated_confirmation_does_not_duplicate_meals():
+    payload = {'confirmation_id':'demo-confirmation-001', 'items':[
+        {'food_id':'T1','grams':150,'meal_type':'lunch','confirmed':True}]}
+    with TestClient(app) as client:
+        before = len(client.get('/api/dashboard').json()['entries'])
+        first = client.post('/api/food-logs/batch', json=payload)
+        second = client.post('/api/food-logs/batch', json=payload)
+        assert first.status_code == second.status_code == 201
+        assert first.json()['entries'][0]['id'] == second.json()['entries'][0]['id']
+        assert len(client.get('/api/dashboard').json()['entries']) == before + 1
+        changed = {**payload, 'items':[{**payload['items'][0], 'grams':200}]}
+        assert client.post('/api/food-logs/batch', json=changed).status_code == 409
+
+
 def test_profile_and_plan_fallback(monkeypatch):
     def ai_unavailable(*args, **kwargs):
         raise RuntimeError('AI unavailable in unit test')

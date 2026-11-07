@@ -1,6 +1,8 @@
 # HBTNFIT Track 1
 
-Bản khởi tạo ứng dụng nhận diện món Việt, ghi nhật ký dinh dưỡng và lập thực đơn 7 ngày theo tài liệu đề xuất của nhóm. Luồng quét ảnh đã được mở rộng theo yêu cầu mới: Gemini gợi ý tối đa 5 món trong một ảnh, người dùng xác nhận từng món; chỉ mở nhập tay khi gợi ý sai hoặc món bị bỏ sót. Đây là mã nguồn chạy thử, chưa có bộ dữ liệu dinh dưỡng đã kiểm chứng, bộ ảnh đánh giá hay kết quả thực nghiệm thật.
+Bản demo đầu tiên tập trung vào **Ăn uống** và **Tập luyện**. Gemini gợi ý tối đa 5 món trong một ảnh; người dùng chỉnh khẩu phần, xác nhận rồi mới thêm vào thực đơn hôm nay. Bài tập có thể xem chi tiết, bắt đầu và đánh dấu hoàn thành. API lập thực đơn 7 ngày từ đề xuất trước vẫn còn trong backend, nhưng chưa nằm trong giao diện phiên bản này. Xem [đặc tả UI phiên bản đầu](docs/UI_V1.md).
+
+Đây là mã nguồn chạy thử, chưa có bộ dữ liệu dinh dưỡng đã kiểm chứng, bộ ảnh đánh giá hay kết quả thực nghiệm thật.
 
 ## Chạy trên máy
 
@@ -25,11 +27,11 @@ npm run dev
 
 Mở `http://localhost:5173`. API docs ở `http://localhost:8000/docs`.
 
-Để gọi Gemini, tạo `backend/.env` từ `.env.example` và điền `GEMINI_API_KEY`. Backend tự nạp file này. Không commit khóa. Không có khóa, chức năng quét ảnh trả lỗi 503 và tìm món thủ công vẫn hoạt động. Thực đơn dùng bộ sinh theo quy tắc, được gắn `generation_mode=rule_fallback`. Khi có khóa, hệ thống gọi Gemini rồi hậu kiểm; nếu kết quả không hợp lệ, dùng dự phòng. Model đang dùng cho demo là `gemini-3.5-flash-lite`.
+Để gọi Gemini, tạo `backend/.env` từ `.env.example` và điền `GEMINI_API_KEY`. Backend tự nạp file này. Không commit khóa. Không có khóa, chức năng quét ảnh trả lỗi 503 và tìm món thủ công vẫn hoạt động. Model đang dùng cho demo là `gemini-3.5-flash-lite`.
 
 ## Xem demo
 
-Sau khi chạy hai terminal trên, mở `http://localhost:5173` và chọn ảnh; ứng dụng tự gửi ảnh cho Gemini. Có thể chọn **Thử ảnh một món** hoặc **Thử ảnh hai món**. Giao diện hiển thị gợi ý riêng cho từng món; phải chọn món và nhập số gam rồi mới bật nút lưu. Nếu gợi ý sai, bấm **Không đúng món nào? Nhập tay** để tìm trong danh mục; có thể thêm món Gemini bỏ sót. Các ảnh mẫu trong `demo/` được tạo bằng AI, chỉ để thử phần mềm, không dùng làm mẫu đánh giá độ chính xác. Ở tab **Thực đơn 7 ngày**, nhập mục tiêu thử nghiệm và bấm **Tạo thực đơn**; giao diện cho biết kết quả đến từ Gemini hay bộ quy tắc dự phòng.
+Sau khi chạy hai terminal trên, mở `http://localhost:5173`. Kéo thả ảnh hoặc bấm **Tải ảnh**; ứng dụng tự gửi ảnh cho Gemini và hiển thị trạng thái phân tích. Có thể dùng **Một món** hoặc **Hai món** ở mục ảnh thử nhanh. Chọn món Gemini gợi ý, chỉnh gam và bữa ăn rồi bấm **Xác nhận thêm**; thực đơn bên phải chỉ cộng sau bước này. Nếu gợi ý sai, bấm **Gợi ý chưa đúng? Nhập tay** để tìm trong danh mục. Có thể đổi/xóa ảnh, thêm món AI bỏ sót, sửa/xóa món đã lưu. Ở **Tập luyện**, mở chi tiết từng bài, bắt đầu và đánh dấu hoàn thành. Ảnh trong `demo/` được tạo bằng AI để thử giao diện, không dùng làm mẫu đánh giá độ chính xác.
 
 ## Dữ liệu
 
