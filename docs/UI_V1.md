@@ -36,6 +36,6 @@ Bốn món và số dinh dưỡng hiện là dữ liệu tổng hợp chưa ki�
 
 ## Bổ sung hồ sơ và hướng dẫn tập
 
-- Hồ sơ cho nhập cân nặng hiện tại, cân nặng mong muốn và thành phần cần tránh. Gemini tạo hai cách ăn có ví dụ bữa cụ thể và hai phương pháp tập tương ứng mục tiêu. Người dùng chọn phương án; lựa chọn giáo án đồng bộ sang trang Tập luyện.
+- Hồ sơ cho nhập cân nặng hiện tại, cân nặng mong muốn và thành phần cần tránh. Gemini tạo hai cách ăn có ví dụ bữa cụ thể và hai phương pháp tập tương ứng mục tiêu. Người dùng chọn phương án; lựa chọn giáo án đồng bộ sang trang Tập luyện. Mỗi giáo án cho xem trước tên bài, nhóm cơ, số hiệp/lần của từng buổi. Buổi Pull có kéo dọc (Lat Pulldown), kéo ngang (Seated Cable Row), lưng trên (High Back Row) và lưng dưới (Back Extension), với hướng dẫn và thời gian nghỉ ở chi tiết bài.
 - Mỗi bài trong buổi tập có các bước thực hiện và thời gian nghỉ giữa hiệp. Nội dung chỉ là hướng dẫn tham khảo, không thay thế huấn luyện trực tiếp.
 - Dữ liệu demo tách theo mã phiên của từng trình duyệt, không phải đăng nhập. Không dùng thông tin sức khỏe thật khi test công khai.

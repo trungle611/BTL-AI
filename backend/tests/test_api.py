@@ -196,6 +196,14 @@ def test_workout_plan_selection_and_progress(monkeypatch):
         plans = client.get('/api/workouts/plans').json()
         assert {(plan['goal'], plan['method']) for plan in plans} == {
             ('gain','PPL'),('gain','UL'),('lose','PPL'),('lose','UL')}
+        for plan in plans:
+            assert len(plan['schedule']) == len(plan['session_exercises'])
+            assert all(item['focus'] for session in plan['session_exercises'] for item in session)
+        pull = next(plan for plan in plans if plan['id'] == 'gain_ppl')['session_exercises'][1]
+        assert any(item['name'].startswith('Seated Cable Row') for item in pull)
+        assert any(item['name'].startswith('Lat Pulldown') for item in pull)
+        assert any('Lưng trên' in item['focus'] for item in pull)
+        assert any('Lưng dưới' in item['focus'] for item in pull)
         assert client.post('/api/workouts/select', json={'plan_id':'missing'}).status_code == 404
         selected = client.post('/api/workouts/select', json={'plan_id':'gain_ppl'})
         assert selected.status_code == 200
@@ -225,6 +233,7 @@ def test_workout_plan_selection_and_progress(monkeypatch):
         following = client.get('/api/workouts/today').json()
         assert following['session_name'] == 'Pull'
         assert following['session_number'] == 2
+        assert any(item['name'].startswith('Lat Pulldown') and item['steps'] for item in following['items'])
 
 
 def test_profile_weight_guidance_and_choice(monkeypatch):
