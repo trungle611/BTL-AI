@@ -123,7 +123,8 @@ def test_custom_food_can_be_confirmed_and_replayed():
 
 def test_workout_plan_selection_and_progress(monkeypatch):
     from datetime import date
-    monkeypatch.setattr('app.main.local_today', lambda: date(2026, 11, 9))
+    current_day = [date(2026, 11, 9)]
+    monkeypatch.setattr('app.main.local_today', lambda: current_day[0])
     with TestClient(app) as client:
         plans = client.get('/api/workouts/plans').json()
         assert {(plan['goal'], plan['method']) for plan in plans} == {
@@ -133,11 +134,30 @@ def test_workout_plan_selection_and_progress(monkeypatch):
         assert selected.status_code == 200
         today = selected.json()
         assert today['selected_plan']['id'] == 'gain_ppl'
+        assert today['session_name'] == 'Push'
         assert today['items']
+        assert client.post(f"/api/workouts/{today['items'][0]['id']}/start").status_code == 409
+        missed = client.post('/api/workouts/attendance', json={'status':'missed'}).json()
+        assert missed['attendance'] == 'missed'
+        assert client.post(f"/api/workouts/{today['items'][0]['id']}/start").status_code == 409
+        current_day[0] = date(2026, 11, 10)
+        next_day = client.get('/api/workouts/today').json()
+        assert next_day['session_name'] == 'Push'
+        assert next_day['attendance'] is None
+        assert next_day['attendance_history'][-2]['status'] == 'missed'
+        assert client.post('/api/workouts/attendance', json={'status':'attended'}).status_code == 200
         first_id = today['items'][0]['id']
         assert client.post(f'/api/workouts/{first_id}/start').json()['items'][0]['status'] == 'started'
         assert client.post(f'/api/workouts/{first_id}/complete').json()['items'][0]['status'] == 'completed'
-        assert client.get('/api/workouts/today').json()['items'][0]['status'] == 'completed'
+        for item in today['items'][1:]:
+            assert client.post(f"/api/workouts/{item['id']}/complete").status_code == 200
+        finished = client.get('/api/workouts/today').json()
+        assert finished['attendance'] == 'completed'
+        assert client.post('/api/workouts/attendance', json={'status':'missed'}).status_code == 409
+        current_day[0] = date(2026, 11, 11)
+        following = client.get('/api/workouts/today').json()
+        assert following['session_name'] == 'Pull'
+        assert following['session_number'] == 2
 
 
 def test_profile_and_plan_fallback(monkeypatch):

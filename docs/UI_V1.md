@@ -19,16 +19,16 @@ Phiên bản này ưu tiên hai luồng: **Ăn uống** và **Tập luyện**. C
 
 ## Luồng tập luyện
 
-- Trang riêng có bốn giáo án PPL và Upper/Lower, chia theo mục tiêu tăng cơ và giảm cân. Mỗi giáo án hiển thị lịch bảy ngày; lựa chọn được lưu trên backend.
-- Buổi tập hôm nay lấy từ giáo án đã chọn, kèm thời lượng, hiệp/lần và mô tả. Ngày nghỉ hiển thị trạng thái nghỉ. Trước khi chọn giáo án có ba bài làm quen.
-- Có trạng thái chưa bắt đầu, đang tập, hoàn thành. Tiến độ được lưu theo ngày và mã bài/giáo án trên backend, độc lập với nhật ký món ăn.
+- Trang riêng có bốn giáo án PPL và Upper/Lower, chia theo mục tiêu tăng cơ và giảm cân. Mỗi giáo án hiển thị **thứ tự buổi trong chu kỳ**, không ấn định vào thứ trong tuần; lựa chọn được lưu trên backend.
+- Sau khi chọn, danh sách bài của buổi kế tiếp hiện ở đầu trang với thời lượng, hiệp/lần và hướng dẫn. Người dùng ghi nhận **Có đi tập** hoặc **Bỏ lỡ hôm nay**. Bỏ lỡ giữ nguyên buổi cho lần sau; chỉ hoàn thành toàn bộ bài mới chuyển sang buổi kế tiếp vào ngày sau.
+- Lịch sử bảy ngày phân biệt có đi, bỏ lỡ, hoàn thành và chưa ghi. “Chưa ghi” không mặc định là bỏ lỡ. Trạng thái bài tập lưu theo ngày và mã bài/giáo án, độc lập với nhật ký món ăn.
 
 ## Kiểm tra đã thực hiện
 
 - Trình duyệt desktop: nhận diện ảnh hai món bằng Gemini, chỉnh khẩu phần, xác nhận, tổng ngày cập nhật; sửa món đã lưu và tổng tính lại; xem chi tiết bài tập, bắt đầu, hoàn thành.
 - Màn hình 390 px: thanh bên ẩn, nội dung thành một cột đúng thứ tự. Ở 1440 px: thanh trên 72 px, thanh bên 248 px, gap và padding 24 px; trang dài theo nội dung.
-- Backend: 14 kiểm thử pass, gồm món ngoài danh mục, lưu nhiều món, sửa/xóa, chọn giáo án, trạng thái tập và chống thêm trùng. Frontend build pass.
-- Trình duyệt: chọn PPL tăng cơ thấy buổi Legs đúng thứ Bảy; món tự nhập 300 kcal được cộng vào tổng; bố cục giáo án ở 390 px không tràn ngang.
+- Backend: 14 kiểm thử pass, gồm món ngoài danh mục, lưu nhiều món, sửa/xóa, chọn giáo án, bỏ lỡ giữ nguyên buổi, hoàn thành chuyển buổi và chống thêm trùng. Frontend build pass.
+- Trình duyệt: chọn PPL tăng cơ thấy buổi Push đầu tiên cùng bốn bài cụ thể, nút ghi nhận đi tập và lịch sử bảy ngày; món tự nhập 300 kcal được cộng vào tổng; bố cục giáo án ở 390 px không tràn ngang.
 
 ## Giới hạn dữ liệu demo
 

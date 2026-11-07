@@ -4,7 +4,7 @@ import hashlib
 import json
 from time import perf_counter
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session, selectinload
 from . import ai
 from .core import fallback_plan, match_foods, normalize, nutrition, validate_plan
 from .db import Base, engine, get_db
-from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile, WorkoutProgress, WorkoutSelection
-from .workout_plans import PLANS, public_plan, today_items
+from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile, WorkoutProgress, WorkoutSelection, WorkoutVisit
+from .workout_plans import PLANS, public_plan, session_items
 
 LOCAL_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -305,10 +305,19 @@ WORKOUTS = [
 def workout_data(db, day):
     selection = db.get(WorkoutSelection, 1)
     plan = next((plan for plan in PLANS if selection and plan["id"] == selection.plan_id), None)
-    items = today_items(plan, day.weekday()) if plan else WORKOUTS
+    visits = db.scalars(select(WorkoutVisit).where(WorkoutVisit.plan_id == plan["id"])).all() if plan else []
+    today_visit = next((visit for visit in visits if visit.day == day.isoformat()), None)
+    completed_sessions = sum(visit.status == "completed" and visit.day <= day.isoformat() for visit in visits)
+    session_index = (today_visit.session_index if today_visit else completed_sessions % len(plan["sessions"])) if plan else None
+    items = session_items(plan, session_index) if plan else WORKOUTS
     progress = {row.workout_id: row for row in db.scalars(select(WorkoutProgress).where(WorkoutProgress.day == day.isoformat()))}
     return {"date": day.isoformat(), "selected_plan": public_plan(plan) if plan else None,
-            "session_name": plan["schedule"][day.weekday()] if plan else "Làm quen",
+            "session_name": plan["schedule"][session_index] if plan else "Làm quen",
+            "session_number": session_index + 1 if plan else None,
+            "attendance": today_visit.status if today_visit else None,
+            "attendance_history": [{"day": (day - timedelta(days=offset)).isoformat(),
+                                    "status": next((v.status for v in visits if v.day == (day - timedelta(days=offset)).isoformat()), None)}
+                                   for offset in range(6, -1, -1)] if plan else [],
             "items": [{**workout, "status": progress[workout["id"]].status if workout["id"] in progress else "not_started"}
             for workout in items]}
 
@@ -338,12 +347,39 @@ def workouts_today(db: Session = Depends(get_db)):
     return workout_data(db, local_today())
 
 
+class AttendanceIn(BaseModel):
+    status: str = Field(pattern="^(attended|missed)$")
+
+
+@app.post("/api/workouts/attendance")
+def record_attendance(payload: AttendanceIn, db: Session = Depends(get_db)):
+    selection = db.get(WorkoutSelection, 1)
+    if not selection:
+        raise HTTPException(409, "Hãy chọn giáo án trước")
+    data = workout_data(db, local_today())
+    today = local_today().isoformat()
+    visit = db.scalar(select(WorkoutVisit).where(WorkoutVisit.plan_id == selection.plan_id, WorkoutVisit.day == today))
+    if visit and visit.status == "completed":
+        raise HTTPException(409, "Buổi tập đã hoàn thành")
+    if not visit:
+        visit = WorkoutVisit(plan_id=selection.plan_id, day=today,
+                             session_index=data["session_number"] - 1, status=payload.status)
+        db.add(visit)
+    else:
+        visit.status = payload.status
+    db.commit()
+    return workout_data(db, local_today())
+
+
 @app.post("/api/workouts/{workout_id}/{action}")
 def workout_action(workout_id: str, action: str, db: Session = Depends(get_db)):
-    if workout_id not in {item["id"] for item in workout_data(db, local_today())["items"]}:
+    data = workout_data(db, local_today())
+    if workout_id not in {item["id"] for item in data["items"]}:
         raise HTTPException(404, "Không tìm thấy bài tập")
     if action not in {"start", "complete"}:
         raise HTTPException(422, "Thao tác không hợp lệ")
+    if data["selected_plan"] and data["attendance"] != "attended":
+        raise HTTPException(409, "Hãy ghi nhận có đi tập hôm nay trước")
     today = local_today().isoformat()
     progress = db.scalar(select(WorkoutProgress).where(WorkoutProgress.workout_id == workout_id,
                                                        WorkoutProgress.day == today))
@@ -357,6 +393,14 @@ def workout_action(workout_id: str, action: str, db: Session = Depends(get_db)):
         progress.status = "completed"
         progress.started_at = progress.started_at or datetime.now(timezone.utc)
         progress.completed_at = datetime.now(timezone.utc)
+        db.flush()
+        if data["selected_plan"]:
+            statuses = {row.workout_id: row.status for row in db.scalars(
+                select(WorkoutProgress).where(WorkoutProgress.day == today))}
+            if all(statuses.get(item["id"]) == "completed" for item in data["items"]):
+                visit = db.scalar(select(WorkoutVisit).where(
+                    WorkoutVisit.plan_id == data["selected_plan"]["id"], WorkoutVisit.day == today))
+                visit.status = "completed"
     db.commit()
     return workout_data(db, local_today())
 

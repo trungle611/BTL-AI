@@ -108,6 +108,17 @@ class WorkoutSelection(Base):
     plan_id: Mapped[str] = mapped_column(String(40))
 
 
+class WorkoutVisit(Base):
+    __tablename__ = "workout_visits"
+    __table_args__ = (UniqueConstraint("plan_id", "day"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[str] = mapped_column(String(40))
+    day: Mapped[str] = mapped_column(String(10))
+    session_index: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class BatchSubmission(Base):
     __tablename__ = "batch_submissions"
     confirmation_id: Mapped[str] = mapped_column(String(80), primary_key=True)
