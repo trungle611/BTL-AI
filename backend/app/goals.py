@@ -28,10 +28,16 @@ def daily_targets(profile, guidance, today: date | None = None):
     kcal = round(kcal / 25) * 25
     protein_factor = 1.6 if profile.protein_mode == "strength" else 1.2
     protein = round(weight * protein_factor / 5) * 5
+    # Keep fat near 30% of energy, reducing it toward 20% if protein is high.
+    fat_share = max(0.20, min(0.30, 0.55 - protein * 4 / kcal))
+    fat = round(kcal * fat_share / 9)
+    carb = max(0, round((kcal - protein * 4 - fat * 9) / 4))
+    macro_warning = carb * 4 / kcal < 0.45
     rate = abs(delta) * 7 / days
     too_fast = (delta < 0 and rate > 0.9) or (delta > 0 and rate > 0.5)
     limited = abs(requested_adjustment) > 500 or (delta < 0 and maintenance + adjustment < minimum)
-    return {"kcal": int(kcal), "protein_g": int(protein), "protein_factor": protein_factor,
+    return {"kcal": int(kcal), "protein_g": int(protein), "carb_g": int(carb), "fat_g": int(fat),
+            "protein_factor": protein_factor, "macro_distribution_warning": macro_warning,
             "days_remaining": days,
             "target_date": guidance.target_date, "estimated_maintenance_kcal": round(maintenance),
             "timeline_warning": bool(too_fast or limited)}

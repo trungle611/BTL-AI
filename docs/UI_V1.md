@@ -13,7 +13,7 @@ Phiên bản này ưu tiên hai luồng: **Ăn uống** và **Tập luyện**. C
 
 1. Kéo thả hoặc chọn JPG/PNG/WEBP tối đa 5 MB. Ảnh được xem trước; có nút đổi, xóa và thử nhận diện lại. File sai loại hoặc quá lớn được báo rõ.
 2. Gemini xử lý tự động sau khi chọn ảnh. Trong lúc chờ, giao diện hiển thị “Đang phân tích ảnh…” và khóa gửi lại.
-3. Mỗi món được phát hiện có tối đa ba gợi ý. Dinh dưỡng xem trước lấy từ dữ liệu món trong CSDL theo số gam đang nhập, **không lấy số macro do Gemini tự sinh**. Khi gợi ý sai hoặc không khớp danh mục, người dùng có thể nhập tên món mới, bổ sung dinh dưỡng trên 100 g (có thể để trống), rồi xác nhận. Dữ liệu tự nhập gắn cờ chưa kiểm chứng.
+3. Mỗi món được phát hiện có tối đa ba gợi ý. Nếu danh mục có món với dinh dưỡng, giao diện chọn sẵn món đó và tính theo khẩu phần. Nếu không có số liệu phù hợp, Gemini đưa ra **ước tính trên 100 g** để người dùng sửa và xác nhận; các số này chưa được kiểm chứng. Món thiếu dinh dưỡng chỉ được thêm khi người dùng chủ động đánh dấu chấp nhận số liệu còn thiếu.
 4. Khi bấm **Xác nhận thêm**, các món được lưu cùng lúc. Mã xác nhận giúp lần gửi lại cùng nội dung không tạo món trùng. Món chờ xác nhận không vào tổng ngày.
 5. Thực đơn hôm nay nhóm theo bữa, hiển thị tổng kcal/protein/carb/fat và cho sửa gam, đổi bữa hoặc xóa món. Tổng được tính lại từ các món đã lưu.
 

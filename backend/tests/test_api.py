@@ -52,6 +52,8 @@ def test_dated_daily_targets_are_scoped_and_reject_past_date():
         assert targets['kcal'] >= 1200
         assert targets['protein_g'] == 85
         assert targets['protein_factor'] == 1.2
+        assert targets['carb_g'] > 0 and targets['fat_g'] > 0
+        assert abs(4*targets['protein_g'] + 4*targets['carb_g'] + 9*targets['fat_g'] - targets['kcal']) <= 5
         assert client.get('/api/profile', headers=first).json()['daily_targets'] == targets
         assert client.get('/api/profile', headers=second).json()['daily_targets'] is None
         rushed = client.put('/api/profile', headers=first, json={
@@ -91,6 +93,34 @@ def test_scan_groups_dishes_and_requires_selection(monkeypatch):
         assert len(dishes) == 2
         assert dishes[0]['candidates'][0]['id'] == 'T1'
         assert dishes[1]['candidates'] == []
+
+
+def test_scan_returns_editable_nutrition_estimate(monkeypatch):
+    monkeypatch.setattr('app.ai.scan_image', lambda *_: {'dishes': [{
+        'candidate_labels': ['Sườn sốt cà chua'], 'visible_ingredients': ['Sườn'],
+        'uncertainty_reason': '',
+        'estimated_nutrition_100g': {'kcal': 185, 'protein': 15, 'carb': 5, 'fat': 12}}],
+        'warning': ''})
+    image = BytesIO()
+    Image.new('RGB', (32, 32), 'white').save(image, format='PNG')
+    with TestClient(app) as client:
+        dish = client.post('/api/scan', files={'file':('meal.png', image.getvalue(), 'image/png')}).json()['dishes'][0]
+        assert dish['estimated_nutrition_100g'] == {'kcal': 185, 'protein': 15, 'carb': 5, 'fat': 12}
+
+
+def test_zero_nutrition_custom_food_can_be_corrected():
+    headers = {'X-Visitor-Id': 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'}
+    first = {'items': [{'custom_food': {'name': 'Món thiếu số liệu'}, 'grams': 100,
+                        'meal_type': 'lunch', 'confirmed': True}]}
+    updated = {'items': [{'custom_food': {'name': 'Món thiếu số liệu', 'kcal_100g': 185,
+                         'protein_100g': 15, 'carb_100g': 5, 'fat_100g': 12},
+                         'grams': 200, 'meal_type': 'dinner', 'confirmed': True}]}
+    with TestClient(app) as client:
+        assert client.post('/api/food-logs/batch', headers=headers, json=first).status_code == 201
+        corrected = client.post('/api/food-logs/batch', headers=headers, json=updated)
+        assert corrected.status_code == 201
+        assert corrected.json()['entries'][0]['nutrition']['kcal'] == 370
+        assert corrected.json()['entries'][0]['nutrition']['protein'] == 30
 
 
 def test_batch_logs_are_all_or_nothing():

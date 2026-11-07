@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-SCAN_PROMPT_VERSION = "scan-v2-multi-dish"
+SCAN_PROMPT_VERSION = "scan-v3-nutrition-estimate"
 PLAN_PROMPT_VERSION = "plan-v1"
-GUIDANCE_PROMPT_VERSION = "profile-guidance-v3-protein-choice"
+GUIDANCE_PROMPT_VERSION = "profile-guidance-v4-macro-targets"
 
 
 def client():
@@ -36,13 +36,19 @@ def scan_image(image_bytes: bytes, mime_type: str):
     prompt = ("Hãy nhận diện từng món ăn riêng biệt nhìn thấy trong ảnh, tối đa 5 món. "
               "Với mỗi món, trả tối đa 3 tên món có thể là gì theo thứ tự khả năng; không gộp các món khác nhau. "
               "Nếu ảnh mờ hoặc không phải đồ ăn thì trả dishes là mảng rỗng và nêu cảnh báo. "
-              "Không tự đoán số gam, năng lượng hay macro. Không tạo food_id. "
+              "Với mỗi món có thể nhận diện, ước tính kcal, protein, carbohydrate, chất béo cho 100 g món đã chế biến; "
+              "các số chỉ để người dùng sửa và xác nhận, không xem là dữ liệu đo chính xác. "
+              "Nếu ảnh không đủ rõ để ước tính, trả 0 cho cả bốn số. Không đoán khối lượng khẩu phần từ ảnh. Không tạo food_id. "
               "Mọi kết quả đều cần người dùng xác nhận trước khi lưu.")
     dish_schema = {"type": "object", "properties": {
         "candidate_labels": {"type": "array", "items": {"type": "string"}},
         "visible_ingredients": {"type": "array", "items": {"type": "string"}},
-        "uncertainty_reason": {"type": "string"}},
-        "required": ["candidate_labels", "visible_ingredients", "uncertainty_reason"]}
+        "uncertainty_reason": {"type": "string"},
+        "estimated_nutrition_100g": {"type": "object", "properties": {
+            "kcal": {"type": "number"}, "protein": {"type": "number"},
+            "carb": {"type": "number"}, "fat": {"type": "number"}},
+            "required": ["kcal", "protein", "carb", "fat"]}},
+        "required": ["candidate_labels", "visible_ingredients", "uncertainty_reason", "estimated_nutrition_100g"]}
     schema = {"type": "object", "properties": {
         "dishes": {"type": "array", "items": dish_schema},
         "warning": {"type": "string"}},
@@ -88,7 +94,7 @@ def generate_profile_guidance(profile, target_weight_kg, plan_names, targets=Non
               "Đưa ra phân tích ngắn, hai cách ăn uống khác nhau với ví dụ món/bữa cụ thể, "
               "và một nhận xét ngắn cho PPL, một cho Upper/Lower để người dùng tự chọn. "
               "Ưu tiên ăn đủ chất và tập kháng lực phù hợp, không đề xuất ăn kiêng cực đoan, "
-              "Nếu có daily_targets_estimate, gợi ý món phù hợp với kcal và protein đó nhưng không tự đổi con số; "
+              "Nếu có daily_targets_estimate, gợi ý món phù hợp với kcal và các macro đó nhưng không tự đổi con số; "
               "nếu thiếu, không tự đưa kcal/ngày. Không hứa đạt cân nặng đúng hạn, không chẩn đoán. "
               "Tôn trọng thành phần cần tránh. Nếu mục tiêu có vẻ không phù hợp, nói cần tham khảo chuyên gia. "
               f"Hồ sơ: {json.dumps(context, ensure_ascii=False)}")

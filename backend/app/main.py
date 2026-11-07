@@ -21,7 +21,7 @@ from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, 
 from .workout_plans import PLANS, public_plan, session_items
 
 LOCAL_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
-GOAL_ANALYSIS_VERSION = "protein-choice-v1"
+GOAL_ANALYSIS_VERSION = "macro-targets-v1"
 
 
 def local_today():
@@ -266,7 +266,16 @@ async def scan(file: UploadFile = File(...), db: Session = Depends(get_db)):
     for item in result.get("dishes", [])[:5]:
         labels = [label for label in item.get("candidate_labels", [])[:3] if isinstance(label, str)]
         candidates = match_foods(labels, records)
+        raw_estimate = item.get("estimated_nutrition_100g") or {}
+        estimate = None
+        try:
+            values = {key: float(raw_estimate[key]) for key in ("kcal", "protein", "carb", "fat")}
+            if 0 < values["kcal"] <= 900 and all(0 <= values[key] <= 100 for key in ("protein", "carb", "fat")):
+                estimate = {key: round(value, 1) for key, value in values.items()}
+        except (KeyError, TypeError, ValueError):
+            pass
         dishes.append({"suggested_labels": labels, "candidates": [food_data(f) for f in candidates],
+                       "estimated_nutrition_100g": estimate,
                        "visible_ingredients": item.get("visible_ingredients", []),
                        "uncertainty_reason": item.get("uncertainty_reason", "")})
     if not dishes:
@@ -343,6 +352,12 @@ def add_logs_batch(payload: BatchLogIn, db: Session = Depends(get_db)):
                 raise HTTPException(409, "Tên món đã có trong danh mục; hãy chọn món có sẵn")
             if food and food.source_type != "user_entered":
                 raise HTTPException(409, "Tên món đã có trong danh mục; hãy chọn món có sẵn")
+            if food and food.kcal_100g == 0 and custom.kcal_100g > 0:
+                food.kcal_100g = custom.kcal_100g
+                food.protein_100g = custom.protein_100g
+                food.carb_100g = custom.carb_100g
+                food.fat_100g = custom.fat_100g
+                food.source_reference = "Người dùng tự nhập/điều chỉnh ước tính; chưa kiểm chứng"
             if not food:
                 food = Food(id=f"user-{uuid.uuid4().hex[:32]}", name=f"{name[:130]} [{uuid.uuid4().hex[:12]}]",
                             display_name=name, owner_id=visitor(db),
