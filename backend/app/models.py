@@ -78,3 +78,14 @@ class MealPlanItem(Base):
     grams: Mapped[float] = mapped_column(Float)
     plan: Mapped[MealPlan] = relationship(back_populates="items")
     food: Mapped[Food] = relationship()
+
+
+class AiRun(Base):
+    __tablename__ = "ai_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    purpose: Mapped[str] = mapped_column(String(30))
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    model_id: Mapped[str] = mapped_column(String(80))
+    latency_ms: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

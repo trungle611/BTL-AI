@@ -38,7 +38,10 @@ def test_scan_rejects_bad_upload():
         assert response.status_code == 415
 
 
-def test_profile_and_plan_fallback():
+def test_profile_and_plan_fallback(monkeypatch):
+    def ai_unavailable(*args, **kwargs):
+        raise RuntimeError('AI unavailable in unit test')
+    monkeypatch.setattr('app.ai.generate_plan', ai_unavailable)
     with SessionLocal() as db:
         for id, kcal in [('T2', 150), ('T3', 200)]:
             db.add(Food(id=id, name=id, kcal_100g=kcal, protein_100g=10,

@@ -25,7 +25,11 @@ npm run dev
 
 Mở `http://localhost:5173`. API docs ở `http://localhost:8000/docs`.
 
-Nếu cần gọi Gemini, tạo `backend/.env` từ `.env.example` và nạp `GEMINI_API_KEY` vào môi trường trước khi chạy backend. Ví dụ PowerShell: `$env:GEMINI_API_KEY='...'`. Không commit khóa. Không có khóa, chức năng quét ảnh trả lỗi 503 và tìm món thủ công vẫn hoạt động. Thực đơn dùng bộ sinh theo quy tắc, được gắn `generation_mode=rule_fallback`. Khi có khóa, hệ thống gọi Gemini rồi hậu kiểm; nếu kết quả không hợp lệ, dùng dự phòng.
+Để gọi Gemini, tạo `backend/.env` từ `.env.example` và điền `GEMINI_API_KEY`. Backend tự nạp file này. Không commit khóa. Không có khóa, chức năng quét ảnh trả lỗi 503 và tìm món thủ công vẫn hoạt động. Thực đơn dùng bộ sinh theo quy tắc, được gắn `generation_mode=rule_fallback`. Khi có khóa, hệ thống gọi Gemini rồi hậu kiểm; nếu kết quả không hợp lệ, dùng dự phòng. Model đang dùng cho demo là `gemini-3.5-flash-lite`.
+
+## Xem demo
+
+Sau khi chạy hai terminal trên, mở `http://localhost:5173`, chọn **Thử ảnh phở mẫu** để xem AI nhận diện ảnh tổng hợp. Chọn món, nhập số gam và bấm **Xác nhận và lưu nhật ký**. Ở tab **Thực đơn 7 ngày**, nhập mục tiêu thử nghiệm và bấm **Tạo thực đơn**; giao diện cho biết kết quả đến từ Gemini hay bộ quy tắc dự phòng. Ảnh mẫu nằm tại `demo/pho_bo_synthetic.png` và được tạo bằng AI, chỉ để thử phần mềm, không dùng làm mẫu đánh giá độ chính xác.
 
 ## Dữ liệu
 

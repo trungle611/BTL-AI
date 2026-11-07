@@ -1,5 +1,7 @@
 import os
 import uuid
+from time import perf_counter
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
@@ -11,15 +13,16 @@ from sqlalchemy.orm import Session, selectinload
 from . import ai
 from .core import fallback_plan, match_foods, normalize, nutrition, validate_plan
 from .db import Base, engine, get_db
-from .models import Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile
+from .models import AiRun, Food, FoodAlias, FoodLog, MealPlan, MealPlanItem, Profile
 
-app = FastAPI(title="HBTNFIT API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["*"], allow_headers=["*"])
-
-
-@app.on_event("startup")
-def startup():
+@asynccontextmanager
+async def lifespan(app):
     Base.metadata.create_all(engine)
+    yield
+
+
+app = FastAPI(title="HBTNFIT API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["*"], allow_headers=["*"])
 
 
 def food_data(food):
@@ -97,12 +100,21 @@ async def scan(file: UploadFile = File(...), db: Session = Depends(get_db)):
             image.verify()
     except (UnidentifiedImageError, OSError):
         raise HTTPException(422, "File ảnh không hợp lệ")
+    started = perf_counter()
+    status = "ok"
     try:
         result = ai.scan_image(raw, file.content_type)
     except RuntimeError as exc:
+        status = "not_configured"
         raise HTTPException(503, str(exc))
     except Exception:
+        status = "service_error"
         raise HTTPException(503, "Dịch vụ nhận diện tạm thời không khả dụng")
+    finally:
+        db.add(AiRun(purpose="scan", prompt_version=ai.SCAN_PROMPT_VERSION,
+                     model_id=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+                     latency_ms=round((perf_counter() - started) * 1000), status=status))
+        db.commit()
     records = db.scalars(select(Food).options(selectinload(Food.aliases))).all()
     candidates = match_foods(result.get("candidate_labels", [])[:3], records)
     return {"request_id": request_id, "status": "needs_confirmation" if candidates else "unknown",
@@ -183,18 +195,24 @@ def create_plan(payload: PlanIn, db: Session = Depends(get_db)):
     if len(allowed) < 3:
         raise HTTPException(422, "Không đủ món phù hợp; cần tối thiểu ba món")
     mode = "gemini"
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    started = perf_counter()
     try:
         proposed = ai.generate_plan(allowed, payload.target_kcal)
         checked = validate_plan(proposed, [f.id for f in allowed], records, payload.avoid_tags, payload.target_kcal)
+        run_status = "ok"
     except Exception:
         mode = "rule_fallback"
+        run_status = "fallback"
         model = "deterministic-v1"
         try:
             proposed = fallback_plan(allowed, payload.target_kcal)
             checked = validate_plan(proposed, [f.id for f in allowed], records, payload.avoid_tags, payload.target_kcal)
         except ValueError as exc:
             raise HTTPException(422, str(exc))
+    db.add(AiRun(purpose="planner", prompt_version=ai.PLAN_PROMPT_VERSION,
+                 model_id=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+                 latency_ms=round((perf_counter() - started) * 1000), status=run_status))
     plan = MealPlan(week_start=payload.week_start.isoformat(), target_kcal=payload.target_kcal,
                     avoid_tags=payload.avoid_tags, generation_mode=mode, model_version=model)
     for day in checked:

@@ -1,7 +1,13 @@
 import json
 import os
+import time
+from pathlib import Path
 from google import genai
 from google.genai import types
+from google.genai import errors
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SCAN_PROMPT_VERSION = "scan-v1"
 PLAN_PROMPT_VERSION = "plan-v1"
@@ -9,7 +15,17 @@ PLAN_PROMPT_VERSION = "plan-v1"
 
 def client():
     key = os.getenv("GEMINI_API_KEY")
-    return genai.Client(api_key=key) if key else None
+    return genai.Client(api_key=key, http_options=types.HttpOptions(timeout=20000)) if key else None
+
+
+def call_with_retry(fn):
+    for attempt in range(2):
+        try:
+            return fn()
+        except errors.APIError as exc:
+            if attempt or exc.code not in (429, 503):
+                raise
+            time.sleep(0.5)
 
 
 def scan_image(image_bytes: bytes, mime_type: str):
@@ -26,11 +42,11 @@ def scan_image(image_bytes: bytes, mime_type: str):
         "uncertainty_reason": {"type": "string"},
         "needs_confirmation": {"type": "boolean"}},
         "required": ["candidate_labels", "visible_ingredients", "portion_hint", "uncertainty_reason", "needs_confirmation"]}
-    response = ai.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+    response = call_with_retry(lambda: ai.models.generate_content(
+        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), prompt],
-        config=types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=schema),
-    )
+        config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema),
+    ))
     return json.loads(response.text)
 
 
@@ -47,8 +63,8 @@ def generate_plan(foods, target_kcal):
         "day": {"type": "integer"}, "meals": {"type": "array", "items": {"type": "object", "properties": {
             "meal_slot": {"type": "string"}, "food_id": {"type": "string"}, "grams": {"type": "number"}},
             "required": ["meal_slot", "food_id", "grams"]}}}, "required": ["day", "meals"]}}}, "required": ["days"]}
-    response = ai.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"), contents=prompt,
-        config=types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=schema),
-    )
+    response = call_with_retry(lambda: ai.models.generate_content(
+        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"), contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema),
+    ))
     return json.loads(response.text)["days"]
