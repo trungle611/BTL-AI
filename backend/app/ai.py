@@ -11,7 +11,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SCAN_PROMPT_VERSION = "scan-v2-multi-dish"
 PLAN_PROMPT_VERSION = "plan-v1"
-GUIDANCE_PROMPT_VERSION = "profile-guidance-v2-targets"
+GUIDANCE_PROMPT_VERSION = "profile-guidance-v3-protein-choice"
 
 
 def client():

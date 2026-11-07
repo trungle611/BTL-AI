@@ -30,7 +30,7 @@ def migrate_demo_columns():
     if not DATABASE_URL.startswith("sqlite"):
         return
     columns = {"foods": {"display_name": "VARCHAR(160)", "owner_id": "VARCHAR(40)"},
-               "profiles": {"visitor_id": "VARCHAR(40)", "sex": "VARCHAR(10)", "activity_level": "VARCHAR(20)"},
+               "profiles": {"visitor_id": "VARCHAR(40)", "sex": "VARCHAR(10)", "activity_level": "VARCHAR(20)", "protein_mode": "VARCHAR(20)"},
                "profile_guidance": {"visitor_id": "VARCHAR(40)", "target_date": "VARCHAR(10)"},
                "food_logs": {"visitor_id": "VARCHAR(40)"},
                "meal_plans": {"visitor_id": "VARCHAR(40)"},

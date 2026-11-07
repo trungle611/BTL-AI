@@ -60,7 +60,7 @@ function App() {
       <main className="content"><div className="page-intro"><div><div className="date-line"><CalendarDays size={15}/>{dateLabel}</div><h1>{title}</h1><p>{subtitle}</p></div><span className="demo-badge">PHIÊN BẢN ĐẦU TIÊN</span></div>{notice&&<div className="global-notice" role="alert">{notice}<button aria-label="Đóng thông báo" onClick={()=>setNotice('')}>×</button></div>}
         {(section==='home'||section==='food')&&<div className="dashboard-grid"><div className="main-column"><ScanSection call={call} foods={foods} onAdded={refresh}/></div><div className="side-column"><TodayMeals dashboard={dashboard} profile={profile} onOpenProfile={()=>go('profile')} call={call} refresh={refresh} onError={setNotice}/></div></div>}
         {section==='workout'&&<div className="training-page">{workouts?.selected_plan&&<WorkoutPanel workouts={workouts} call={call} refresh={refresh} onError={setNotice}/>}<WorkoutPlans plans={plans} selectedId={workouts?.selected_plan?.id} call={call} refresh={refresh} onError={setNotice}/></div>}
-        {section==='profile'&&<ProfilePanel profile={profile} setProfile={setProfile} call={call} onError={setNotice} refresh={refresh}/>}
+        {section==='profile'&&<ProfilePanel profile={profile} setProfile={setProfile} call={call} onError={setNotice} refresh={refresh} onOpenFood={()=>go('food')}/>}
         <footer className="app-footer">Thông tin dinh dưỡng và bài tập chỉ mang tính tham khảo. Dữ liệu món demo chưa được kiểm chứng.</footer>
       </main>
     </div>

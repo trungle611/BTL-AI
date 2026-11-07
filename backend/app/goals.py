@@ -26,11 +26,12 @@ def daily_targets(profile, guidance, today: date | None = None):
     minimum = 1500 if profile.sex == "male" else 1200
     kcal = max(minimum, maintenance + adjustment)
     kcal = round(kcal / 25) * 25
-    protein_factor = 1.2 if profile.activity_level == "sedentary" else 1.6
+    protein_factor = 1.6 if profile.protein_mode == "strength" else 1.2
     protein = round(weight * protein_factor / 5) * 5
     rate = abs(delta) * 7 / days
     too_fast = (delta < 0 and rate > 0.9) or (delta > 0 and rate > 0.5)
     limited = abs(requested_adjustment) > 500 or (delta < 0 and maintenance + adjustment < minimum)
-    return {"kcal": int(kcal), "protein_g": int(protein), "days_remaining": days,
+    return {"kcal": int(kcal), "protein_g": int(protein), "protein_factor": protein_factor,
+            "days_remaining": days,
             "target_date": guidance.target_date, "estimated_maintenance_kcal": round(maintenance),
             "timeline_warning": bool(too_fast or limited)}

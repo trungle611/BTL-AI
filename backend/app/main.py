@@ -21,6 +21,7 @@ from .models import AiRun, BatchSubmission, Food, FoodAlias, FoodLog, MealPlan, 
 from .workout_plans import PLANS, public_plan, session_items
 
 LOCAL_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+GOAL_ANALYSIS_VERSION = "protein-choice-v1"
 
 
 def local_today():
@@ -96,22 +97,24 @@ class ProfileIn(BaseModel):
     target_date: date | None = None
     sex: str | None = Field(default=None, pattern="^(female|male)$")
     activity_level: str | None = Field(default=None, pattern="^(sedentary|light|moderate|high)$")
+    protein_mode: str = Field(default="balanced", pattern="^(balanced|strength)$")
     goal: str = Field(default="maintain", pattern="^(maintain|gain|lose)$")
     avoid_tags: list[str] = []
     target_kcal: float = Field(default=1800, ge=900, le=5000)
 
 
 def profile_data(profile, guidance=None):
+    analysis = guidance.analysis if guidance and guidance.analysis and guidance.analysis.get("target_version") == GOAL_ANALYSIS_VERSION else None
     return {"age": profile.age, "height_cm": profile.height_cm,
             "weight_kg": profile.weight_kg, "sex": profile.sex,
-            "activity_level": profile.activity_level, "goal": profile.goal,
+            "activity_level": profile.activity_level, "protein_mode": profile.protein_mode or "balanced", "goal": profile.goal,
             "avoid_tags": profile.avoid_tags or [], "target_kcal": profile.target_kcal,
             "target_weight_kg": guidance.target_weight_kg if guidance else None,
             "target_date": guidance.target_date if guidance else None,
             "daily_targets": daily_targets(profile, guidance, local_today()),
-            "analysis": guidance.analysis if guidance else None,
-            "food_choice": guidance.food_choice if guidance else None,
-            "workout_choice": guidance.workout_choice if guidance else None}
+            "analysis": analysis,
+            "food_choice": guidance.food_choice if analysis else None,
+            "workout_choice": guidance.workout_choice if analysis else None}
 
 
 @app.get("/api/profile")
@@ -130,7 +133,9 @@ def save_profile(payload: ProfileIn, db: Session = Depends(get_db)):
             or guidance.target_date != (payload.target_date.isoformat() if payload.target_date else None)
             or profile.avoid_tags != payload.avoid_tags or profile.age != payload.age
             or profile.height_cm != payload.height_cm or profile.goal != payload.goal
-            or profile.sex != payload.sex or profile.activity_level != payload.activity_level):
+            or profile.sex != payload.sex or profile.activity_level != payload.activity_level
+            or (profile.protein_mode or "balanced") != payload.protein_mode
+            or (guidance.analysis and guidance.analysis.get("target_version") != GOAL_ANALYSIS_VERSION)):
         guidance.analysis = None
         guidance.food_choice = None
         guidance.workout_choice = None
@@ -159,7 +164,7 @@ def analyze_profile(db: Session = Depends(get_db)):
         food_options = generated.get("food_options", [])[:2]
         if len(food_options) != 2 or any(not item.get("title") or not item.get("detail") for item in food_options):
             raise ValueError("AI chưa trả đủ phương án")
-        analysis = {"summary": generated["summary"][:700],
+        analysis = {"target_version": GOAL_ANALYSIS_VERSION, "summary": generated["summary"][:700],
                     "food_options": [{"id": f"food_{index+1}", "title": item["title"][:100],
                                       "detail": item["detail"][:500], "examples": item.get("examples", [])[:4]}
                                      for index, item in enumerate(food_options)],

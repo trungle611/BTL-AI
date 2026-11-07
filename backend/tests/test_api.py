@@ -50,7 +50,8 @@ def test_dated_daily_targets_are_scoped_and_reject_past_date():
         assert targets['target_date'] == deadline
         assert targets['days_remaining'] == 90
         assert targets['kcal'] >= 1200
-        assert targets['protein_g'] == 110
+        assert targets['protein_g'] == 85
+        assert targets['protein_factor'] == 1.2
         assert client.get('/api/profile', headers=first).json()['daily_targets'] == targets
         assert client.get('/api/profile', headers=second).json()['daily_targets'] is None
         rushed = client.put('/api/profile', headers=first, json={
@@ -59,6 +60,12 @@ def test_dated_daily_targets_are_scoped_and_reject_past_date():
             'sex': 'female', 'activity_level': 'moderate', 'goal': 'lose'})
         assert rushed.json()['daily_targets']['timeline_warning'] is True
         assert rushed.json()['daily_targets']['kcal'] >= 1200
+        strength = client.put('/api/profile', headers=first, json={
+            'age': 25, 'height_cm': 170, 'weight_kg': 70, 'target_weight_kg': 67,
+            'target_date': deadline, 'sex': 'female', 'activity_level': 'moderate',
+            'protein_mode': 'strength', 'goal': 'lose'})
+        assert strength.json()['daily_targets']['protein_g'] == 110
+        assert strength.json()['daily_targets']['protein_factor'] == 1.6
         rejected = client.put('/api/profile', headers=first, json={
             'target_date': local_today().isoformat()})
         assert rejected.status_code == 422

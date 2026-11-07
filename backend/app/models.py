@@ -45,6 +45,7 @@ class Profile(Base):
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     sex: Mapped[str | None] = mapped_column(String(10), nullable=True)
     activity_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    protein_mode: Mapped[str] = mapped_column(String(20), default="balanced")
     goal: Mapped[str] = mapped_column(String(20), default="maintain")
     avoid_tags: Mapped[list] = mapped_column(JSON, default=list)
     target_kcal: Mapped[float] = mapped_column(Float, default=1800)
